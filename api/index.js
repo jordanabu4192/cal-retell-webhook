@@ -165,45 +165,75 @@ async function handleFindBookingByDate(args) {
 function findBestMatch(bookings, dateStr, timeStr) {
   console.log('Searching for:', dateStr, timeStr);
   
-  // Convert search terms to lowercase for easier matching
+  // Convert search terms to lowercase and extract key parts
   const searchDate = dateStr.toLowerCase().replace(/[^\w\s]/g, '');
   const searchTime = timeStr.toLowerCase().replace(/[^\w\s]/g, '');
   
+  // Extract month and day from search
+  const monthMap = {
+    'january': 0, 'jan': 0, 'february': 1, 'feb': 1, 'march': 2, 'mar': 2,
+    'april': 3, 'apr': 3, 'may': 4, 'june': 5, 'jun': 5,
+    'july': 6, 'jul': 6, 'august': 7, 'aug': 7, 'september': 8, 'sep': 8,
+    'october': 9, 'oct': 9, 'november': 10, 'nov': 10, 'december': 11, 'dec': 11
+  };
+  
+  // Extract day number from search string
+  const dayMatch = searchDate.match(/(\d+)/);
+  const searchDay = dayMatch ? parseInt(dayMatch[1]) : null;
+  
+  // Extract month from search string
+  let searchMonth = null;
+  for (const [monthName, monthNum] of Object.entries(monthMap)) {
+    if (searchDate.includes(monthName)) {
+      searchMonth = monthNum;
+      break;
+    }
+  }
+  
+  // Extract hour from time string
+  const timeMatch = searchTime.match(/(\d+)/);
+  const searchHour = timeMatch ? parseInt(timeMatch[1]) : null;
+  const isPM = searchTime.includes('pm');
+  
+  console.log('Parsed search:', { searchDay, searchMonth, searchHour, isPM });
+  
   for (const booking of bookings) {
     const bookingDate = new Date(booking.start);
+    const bookingDay = bookingDate.getDate();
+    const bookingMonth = bookingDate.getMonth();
+    const bookingHour = bookingDate.getHours();
     
-    // Create various date format strings to match against
-    const dateFormats = [
-      bookingDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }).toLowerCase(),
-      bookingDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toLowerCase(),
-      `${bookingDate.getMonth() + 1}/${bookingDate.getDate()}`
-    ];
+    console.log('Checking booking:', {
+      bookingDay,
+      bookingMonth, 
+      bookingHour,
+      uid: booking.uid,
+      start: booking.start
+    });
     
-    // Create time format strings to match against
-    const timeFormats = [
-      bookingDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase(),
-      bookingDate.toLocaleTimeString('en-US', { hour: 'numeric' }).toLowerCase()
-    ];
+    // Check if day and month match
+    const dayMatch = searchDay === bookingDay;
+    const monthMatch = searchMonth === bookingMonth;
     
-    console.log('Checking booking:', dateFormats, timeFormats);
+    // Check if hour matches (convert PM if needed)
+    let hourMatch = false;
+    if (searchHour !== null) {
+      let expectedHour = searchHour;
+      if (isPM && searchHour !== 12) expectedHour += 12;
+      if (!isPM && searchHour === 12) expectedHour = 0;
+      
+      // Allow for timezone differences (Mountain Time is UTC-6 or UTC-7)
+      hourMatch = Math.abs(bookingHour - expectedHour) <= 8; // Flexible for timezone
+    }
     
-    // Check if any date format matches
-    const dateMatch = dateFormats.some(format => 
-      format.includes(searchDate) || searchDate.includes(format.replace(/[^\w\s]/g, ''))
-    );
+    console.log('Match results:', { dayMatch, monthMatch, hourMatch });
     
-    // Check if any time format matches
-    const timeMatch = timeFormats.some(format => 
-      format.includes(searchTime) || searchTime.includes(format.replace(/[^\w\s]/g, ''))
-    );
-    
-    if (dateMatch && timeMatch) {
-      console.log('Found match:', booking.uid);
+    if (dayMatch && monthMatch && hourMatch) {
+      console.log('Found exact match:', booking.uid);
       return booking;
     }
   }
   
   console.log('No exact match found, returning first active booking');
-  // If no exact match, return the first active booking
   return bookings.length > 0 ? bookings[0] : null;
 }

@@ -41,9 +41,169 @@ module.exports = async (req, res) => {
   return res.status(405).json({ error: "Method not allowed" });
 };
 
-// Your existing handleRescheduleBooking function stays the same...
+async function handleRescheduleBooking(args) {
+  const { booking_uid, new_start_time, rescheduled_by, reason } = args;
+  
+  console.log('Rescheduling booking:', booking_uid, 'to:', new_start_time);
+  
+  if (!booking_uid) {
+    return "I need your booking ID to reschedule. Can you provide that?";
+  }
+  
+  if (!new_start_time) {
+    return "I need to know what time you'd like to reschedule to. When works better for you?";
+  }
+  
+  try {
+    const response = await fetch(`https://api.cal.com/v2/bookings/${booking_uid}/reschedule`, {
+      method: 'POST',
+      headers: {
+        'cal-api-version': '2024-08-13',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.CAL_API_KEY}`
+      },
+      body: JSON.stringify({
+        start: new_start_time,
+        rescheduledBy: rescheduled_by,
+        reschedulingReason: reason || 'Rescheduled via voice assistant'
+      })
+    });
+    
+    if (!response.ok) {
+      console.error('Cal.com API error:', response.status);
+      
+      if (response.status === 404) {
+        return "I couldn't find a booking with that ID. Can you double-check your booking number?";
+      }
+      if (response.status === 400) {
+        return "That time slot might not be available. Can you suggest another time?";
+      }
+      throw new Error(`Cal.com API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (result.status === 'success') {
+      const booking = result.data;
+      const newDateTime = new Date(booking.start).toLocaleString();
+      
+      return `Perfect! I've successfully rescheduled your booking to ${newDateTime}. Your booking ID is ${booking.uid}.`;
+    } else {
+      return "I encountered an issue while rescheduling your booking. Please try again.";
+    }
+    
+  } catch (error) {
+    console.error('Reschedule error:', error);
+    return "I'm sorry, I'm having trouble connecting to the booking system right now. Please try again in a few minutes.";
+  }
+}
 
-// Add the new function here...
 async function handleFindBookingByDate(args) {
-  // ... your new function code
+  const { email, appointment_date, appointment_time } = args;
+  
+  console.log('Finding booking for:', email, appointment_date, appointment_time);
+  
+  try {
+    // First, get all bookings for this email
+    const response = await fetch(`https://api.cal.com/v2/bookings?email=${email}`, {
+      method: 'GET',
+      headers: {
+        'cal-api-version': '2024-08-13',
+        'Authorization': `Bearer ${process.env.CAL_API_KEY}`
+      }
+    });
+    
+    if (!response.ok) {
+      console.error('Cal.com API error:', response.status);
+      throw new Error(`Cal.com API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    const bookings = result.data || [];
+    
+    console.log('Found bookings:', bookings.length);
+    
+    // Filter for active bookings only
+    const activeBookings = bookings.filter(booking => 
+      booking.status === 'accepted' && new Date(booking.start) > new Date()
+    );
+    
+    console.log('Active future bookings:', activeBookings.length);
+    
+    // Try to match the date and time
+    const matchedBooking = findBestMatch(activeBookings, appointment_date, appointment_time);
+    
+    if (matchedBooking) {
+      const bookingDateTime = new Date(matchedBooking.start).toLocaleString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZoneName: 'short'
+      });
+      
+      return {
+        booking_uid: matchedBooking.uid,
+        booking_details: bookingDateTime
+      };
+    } else {
+      return {
+        error: "I couldn't find an appointment matching that date and time. Could you please double-check the details or provide your booking confirmation number?"
+      };
+    }
+    
+  } catch (error) {
+    console.error('Find booking error:', error);
+    return {
+      error: "I'm having trouble finding your appointment. Please try again or contact our office directly."
+    };
+  }
+}
+
+function findBestMatch(bookings, dateStr, timeStr) {
+  console.log('Searching for:', dateStr, timeStr);
+  
+  // Convert search terms to lowercase for easier matching
+  const searchDate = dateStr.toLowerCase().replace(/[^\w\s]/g, '');
+  const searchTime = timeStr.toLowerCase().replace(/[^\w\s]/g, '');
+  
+  for (const booking of bookings) {
+    const bookingDate = new Date(booking.start);
+    
+    // Create various date format strings to match against
+    const dateFormats = [
+      bookingDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }).toLowerCase(),
+      bookingDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toLowerCase(),
+      `${bookingDate.getMonth() + 1}/${bookingDate.getDate()}`
+    ];
+    
+    // Create time format strings to match against
+    const timeFormats = [
+      bookingDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase(),
+      bookingDate.toLocaleTimeString('en-US', { hour: 'numeric' }).toLowerCase()
+    ];
+    
+    console.log('Checking booking:', dateFormats, timeFormats);
+    
+    // Check if any date format matches
+    const dateMatch = dateFormats.some(format => 
+      format.includes(searchDate) || searchDate.includes(format.replace(/[^\w\s]/g, ''))
+    );
+    
+    // Check if any time format matches
+    const timeMatch = timeFormats.some(format => 
+      format.includes(searchTime) || searchTime.includes(format.replace(/[^\w\s]/g, ''))
+    );
+    
+    if (dateMatch && timeMatch) {
+      console.log('Found match:', booking.uid);
+      return booking;
+    }
+  }
+  
+  console.log('No exact match found, returning first active booking');
+  // If no exact match, return the first active booking
+  return bookings.length > 0 ? bookings[0] : null;
 }

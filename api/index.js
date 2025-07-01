@@ -52,7 +52,12 @@ if (name === 'cancel_booking') {
         const result = await handleGetTomorrowAppointments(args);
         return res.json(result);
       }
-      
+
+      if (name === 'trigger_reminders') {         
+        const result = await handleTriggerReminders(args); 
+        return res.json(result);       
+      }       
+                                
       return res.status(400).json({ error: "Unknown function" });
       
     } catch (error) {
@@ -613,5 +618,42 @@ async function handleGetTomorrowAppointments(args) {
   } catch (error) {
     console.error('Error fetching appointments:', error);
     return { success: false, error: "Could not fetch appointments" };
+  }
+}
+async function handleTriggerReminders(args) {
+  try {
+    // Get tomorrow's appointments
+    const appointmentsResult = await handleGetTomorrowAppointments({});
+    if (!appointmentsResult.success) {
+      return { success: false, error: "Could not fetch appointments" };
+    }
+
+    const results = [];
+    for (const appointment of appointmentsResult.appointments) {
+      // Trigger Retell outbound call
+      const callResult = await fetch('https://api.retellai.com/v2/call', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          agent_id: 'YOUR_REMINDER_AGENT_ID', // Replace with actual agent ID
+          phone_number: appointment.attendees[0].phone,
+          metadata: {
+            appointment_id: appointment.uid,
+            patient_name: appointment.attendees[0].name,
+            appointment_time: appointment.start
+          }
+        })
+      });
+      
+      results.push({ patient: appointment.attendees[0].name, status: callResult.status });
+    }
+    
+    return { success: true, calls_triggered: results.length, results };
+  } catch (error) {
+    console.error('Trigger reminders error:', error);
+    return { success: false, error: "Could not trigger reminder calls" };
   }
 }

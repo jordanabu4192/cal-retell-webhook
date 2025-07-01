@@ -112,11 +112,14 @@ async function handleRescheduleBooking(args) {
   to_number: phone,
   override_agent_id: 'agent_2647fcddc05b42bbf5096eeae3', // Changed from agent_id
   retell_llm_dynamic_variables: {
-    patient_name: appointment.attendees[0].name,
-    appointment_date: new Date(appointment.start).toLocaleDateString(),
-    appointment_time: new Date(appointment.start).toLocaleTimeString()
-  }
+  patient_name: appointment.attendees[0].name,
+  appointment_date: new Date(appointment.start).toLocaleDateString(),
+  appointment_time: new Date(appointment.start).toLocaleTimeString()
+}
 })
+});
+
+const result = await callResult.json();
     
     if (!response.ok) {
       console.error('Cal.com API error:', response.status);

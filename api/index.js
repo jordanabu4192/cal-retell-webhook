@@ -108,7 +108,7 @@ async function handleRescheduleBooking(args) {
         'Authorization': `Bearer ${process.env.CAL_API_KEY}`
       },
      body: JSON.stringify({
-  from_number: '+18134319146',
+  from_number: '+15056056546',
   to_number: phone,
   override_agent_id: 'agent_2647fcddc05b42bbf5096eeae3', // Changed from agent_id
   retell_llm_dynamic_variables: {

@@ -640,23 +640,23 @@ async function handleTriggerReminders(args) {
 
     const results = [];
     for (const appointment of appointmentsResult.appointments) {
-// Extract phone from metadata and convert to E.164
-let phone = appointment.metadata?.phone || appointment.attendees[0]?.phoneNumber;
-if (phone) {
-  // Remove all non-digits and add +1
-  phone = '+1' + phone.replace(/\D/g, '');
-}
-console.log('Calling phone:', phone);
+      // Extract phone from metadata and convert to E.164
+      let phone = appointment.metadata?.phone || appointment.attendees[0]?.phoneNumber;
+      if (phone) {
+        // Remove all non-digits and add +1
+        phone = '+1' + phone.replace(/\D/g, '');
+      }
+      console.log('Calling phone:', phone);
       
       // Trigger Retell outbound call
-const callResult = await fetch('https://api.retellai.com/create-phone-call', {
+      const callResult = await fetch('https://api.retellai.com/create-phone-call', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          from_number: '+15056056546', // Your Retell number
+          from_number: '+15056056546',
           to_number: phone,
           override_agent_id: 'agent_2647fcddc05b42bbf5096eeae3',
           retell_llm_dynamic_variables: {
@@ -668,12 +668,17 @@ const callResult = await fetch('https://api.retellai.com/create-phone-call', {
       });
       
       const result = await callResult.json();
-      results.push({ patient: appointment.attendees[0].name, status: callResult.status, result });
+      results.push({ 
+        patient: appointment.attendees[0].name, 
+        phone: phone,
+        status: callResult.status, 
+        result: result 
+      });
     }
     
     return { success: true, calls_triggered: results.length, results };
   } catch (error) {
     console.error('Trigger reminders error:', error);
-    return { success: false, error: "Could not trigger reminder calls" };
+    return { success: false, error: `Detailed error: ${error.message}`, stack: error.stack };
   }
 }

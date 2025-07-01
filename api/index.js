@@ -30,6 +30,11 @@ module.exports = async (req, res) => {
         return res.json(result);
       }
       
+      if (name === 'check_availability') {
+  const result = await handleCheckAvailability(args);
+  return res.json(result);
+}
+      
       return res.status(400).json({ error: "Unknown function" });
       
     } catch (error) {
@@ -266,4 +271,100 @@ const isPM = searchTime.includes('pm');
   
   console.log('No exact match found, returning first active booking');
   return bookings.length > 0 ? bookings[0] : null;
+}
+async function handleCheckAvailability(args) {
+  const { date, start_time, end_time, timezone } = args;
+  
+  console.log('Checking availability for:', date, start_time, end_time, timezone);
+  
+  try {
+    // Convert date to ISO format if needed
+    let checkDate = date;
+    if (!date.includes('-')) {
+      // Convert "July 5th" to "2025-07-05" format
+      checkDate = convertDateToISO(date);
+    }
+    
+    // Get existing bookings for that date
+    const startOfDay = `${checkDate}T00:00:00Z`;
+    const endOfDay = `${checkDate}T23:59:59Z`;
+    
+    // For now, let's return a simplified response based on your working hours
+    // We can enhance this later to check actual Cal.com availability
+    const availability = getBusinessHoursAvailability(date, start_time, end_time);
+    
+    return {
+      available: true,
+      availability_details: availability,
+      date_checked: date
+    };
+    
+  } catch (error) {
+    console.error('Check availability error:', error);
+    return {
+      available: false,
+      error: "I'm having trouble checking availability right now. Please try again."
+    };
+  }
+}
+
+function convertDateToISO(dateStr) {
+  // Simple conversion for common date formats
+  const today = new Date();
+  const year = today.getFullYear();
+  
+  // Extract month and day from strings like "July 5th"
+  const months = {
+    'january': '01', 'february': '02', 'march': '03', 'april': '04',
+    'may': '05', 'june': '06', 'july': '07', 'august': '08',
+    'september': '09', 'october': '10', 'november': '11', 'december': '12'
+  };
+  
+  const dateStr_lower = dateStr.toLowerCase();
+  let month = '';
+  let day = '';
+  
+  // Find month
+  for (const [monthName, monthNum] of Object.entries(months)) {
+    if (dateStr_lower.includes(monthName)) {
+      month = monthNum;
+      break;
+    }
+  }
+  
+  // Find day
+  const dayMatch = dateStr_lower.match(/(\d+)/);
+  if (dayMatch) {
+    day = dayMatch[1].padStart(2, '0');
+  }
+  
+  return `${year}-${month}-${day}`;
+}
+
+function getBusinessHoursAvailability(date, requestedStart, requestedEnd) {
+  // Your business hours: 9 AM - 5 PM Monday-Friday, 9 AM - 4 PM Saturday
+  const dateObj = new Date(date);
+  const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday
+  
+  if (dayOfWeek === 0) { // Sunday
+    return {
+      available: false,
+      message: "We're closed on Sundays",
+      business_hours: "Closed"
+    };
+  }
+  
+  let hours = '';
+  if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday-Friday
+    hours = "9:00 AM to 5:00 PM";
+  } else if (dayOfWeek === 6) { // Saturday
+    hours = "9:00 AM to 4:00 PM";
+  }
+  
+  return {
+    available: true,
+    message: `Available during business hours: ${hours}`,
+    business_hours: hours,
+    date: date
+  };
 }

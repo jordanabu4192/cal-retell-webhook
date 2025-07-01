@@ -317,15 +317,6 @@ function getNextSteps(qualification) {
   }
 }
 
-module.exports = {
-  handleCalculateSolarSavings,
-  handleScoreSolarLead,
-  handleBookSolarConsultation,
-  handleSendSolarInfo
-  handleCalculateFinancingOptions,
-  handleLookupLocalIncentives
-};
-
 async function handleCalculateFinancingOptions(args) {
   const { 
     savings_amount, 
@@ -543,3 +534,12 @@ function calculateTotalIncentiveValue(federal, state, utility, expiring) {
   const total = federalValue + stateValue + utilityValue + expiringValue;
   return `$${total.toLocaleString()}`;
 }
+
+module.exports = {
+  handleCalculateSolarSavings,
+  handleScoreSolarLead,
+  handleBookSolarConsultation,
+  handleSendSolarInfo,  
+  handleCalculateFinancingOptions,
+  handleLookupLocalIncentives
+};

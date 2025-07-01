@@ -54,6 +54,23 @@ async function handleRescheduleBooking(args) {
     return "I need to know what time you'd like to reschedule to. When works better for you?";
   }
   
+  // Convert Mountain Time to UTC if needed
+  let utcTime = new_start_time;
+  
+  // Check if the time looks like it might be in Mountain Time (not already UTC)
+  const inputDate = new Date(new_start_time);
+  const hour = inputDate.getUTCHours();
+  
+  // If the hour is between 9-17 (9 AM - 5 PM), likely Mountain Time that needs conversion
+  if (hour >= 9 && hour <= 17) {
+    console.log('Converting Mountain Time to UTC');
+    // Add 6 hours for Mountain Daylight Time (MDT)
+    const convertedDate = new Date(inputDate.getTime() + (6 * 60 * 60 * 1000));
+    utcTime = convertedDate.toISOString();
+    console.log('Original time:', new_start_time);
+    console.log('Converted to UTC:', utcTime);
+  }
+  
   try {
     const response = await fetch(`https://api.cal.com/v2/bookings/${booking_uid}/reschedule`, {
       method: 'POST',
@@ -63,7 +80,7 @@ async function handleRescheduleBooking(args) {
         'Authorization': `Bearer ${process.env.CAL_API_KEY}`
       },
       body: JSON.stringify({
-        start: new_start_time,
+        start: utcTime,
         rescheduledBy: rescheduled_by,
         reschedulingReason: reason || 'Rescheduled via voice assistant'
       })
@@ -85,7 +102,16 @@ async function handleRescheduleBooking(args) {
     
     if (result.status === 'success') {
       const booking = result.data;
-      const newDateTime = new Date(booking.start).toLocaleString();
+      // Convert back to Mountain Time for user-friendly response
+      const newDateTime = new Date(booking.start).toLocaleString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: 'America/Denver'
+      });
       
       return `Perfect! I've successfully rescheduled your booking to ${newDateTime}. Your booking ID is ${booking.uid}.`;
     } else {

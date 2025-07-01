@@ -647,8 +647,13 @@ async function handleTriggerReminders(args) {
 
     const results = [];
     for (const appointment of appointmentsResult.appointments) {
-      // Extract phone from metadata
-      const phone = appointment.metadata?.phone || appointment.attendees[0]?.phoneNumber;
+// Extract phone from metadata and convert to E.164
+let phone = appointment.metadata?.phone || appointment.attendees[0]?.phoneNumber;
+if (phone) {
+  // Remove all non-digits and add +1
+  phone = '+1' + phone.replace(/\D/g, '');
+}
+console.log('Calling phone:', phone);
       
       // Trigger Retell outbound call
      const callResult = await fetch('https://api.retellai.com/v2/create-phone-call', {

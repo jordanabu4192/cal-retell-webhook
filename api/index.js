@@ -658,7 +658,7 @@ async function handleTriggerReminders(args) {
       console.log('Calling phone:', phone);
       
       // Trigger Retell outbound call
-      const callResult = await fetch('https://api.retellai.com/create-phone-call', {
+      const callResult = await fetch('https://api.retellai.com/v2/create-phone-call', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,

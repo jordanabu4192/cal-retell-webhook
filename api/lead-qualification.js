@@ -165,28 +165,47 @@ async function handleBookSolarConsultation(args) {
       }
     }
     
-    // Date parsing
-    if (preferred_time && preferred_time.toLowerCase().includes('tomorrow')) {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      appointmentDate = tomorrow.toISOString().split('T')[0];
-      appointmentTime = extractedTime;
-    } else if (preferred_time && preferred_time.toLowerCase().includes('this week')) {
-      const nextBusinessDay = new Date();
-      nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
-      // Skip weekends
-      while (nextBusinessDay.getDay() === 0 || nextBusinessDay.getDay() === 6) {
-        nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
-      }
-      appointmentDate = nextBusinessDay.toISOString().split('T')[0];
-      appointmentTime = extractedTime;
-    } else {
-      // Default to next business day
-      const nextBusinessDay = new Date();
-      nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
-      appointmentDate = nextBusinessDay.toISOString().split('T')[0];
-      appointmentTime = extractedTime;
-    }
+if (preferred_time.toLowerCase().includes('tomorrow')) {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  appointmentDate = tomorrow.toISOString().split('T')[0];
+  appointmentTime = extractedTime;
+} else if (preferred_time.toLowerCase().includes('july')) {
+  // Handle "July 3rd", "July 3", etc.
+  const year = new Date().getFullYear();
+  const dayMatch = preferred_time.match(/july\s+(\d{1,2})/i);
+  if (dayMatch) {
+    const day = dayMatch[1].padStart(2, '0');
+    appointmentDate = `${year}-07-${day}`;
+    appointmentTime = extractedTime;
+  } else {
+    // Fallback for unclear July dates
+    appointmentDate = `${year}-07-03`; // Default to July 3rd
+    appointmentTime = extractedTime;
+  }
+} else if (preferred_time.toLowerCase().includes('thursday')) {
+  // Find next Thursday
+  const today = new Date();
+  const daysUntilThursday = (4 - today.getDay() + 7) % 7 || 7; // 4 = Thursday
+  const nextThursday = new Date(today);
+  nextThursday.setDate(today.getDate() + daysUntilThursday);
+  appointmentDate = nextThursday.toISOString().split('T')[0];
+  appointmentTime = extractedTime;
+} else if (preferred_time.toLowerCase().includes('this week')) {
+  const nextBusinessDay = new Date();
+  nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
+  while (nextBusinessDay.getDay() === 0 || nextBusinessDay.getDay() === 6) {
+    nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
+  }
+  appointmentDate = nextBusinessDay.toISOString().split('T')[0];
+  appointmentTime = extractedTime;
+} else {
+  // Default to next business day
+  const nextBusinessDay = new Date();
+  nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
+  appointmentDate = nextBusinessDay.toISOString().split('T')[0];
+  appointmentTime = extractedTime;
+}
     
     // Rest of the function stays the same...
     const consultationNotes = `Solar consultation - Lead score: ${lead_score || 'N/A'}. ${notes || 'Initial qualification call'}`;

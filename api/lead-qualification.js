@@ -122,35 +122,47 @@ async function handleScoreSolarLead(args) {
   };
 }
 
+// Replace the booking function in lead-qualification.js with this:
+
 async function handleBookSolarConsultation(args) {
   const { name, email, phone, preferred_time, lead_score, notes } = args;
   
-  // Use your existing appointment booking system
-  const consultationNotes = `Solar consultation - Lead score: ${lead_score || 'N/A'}. ${notes || 'Initial qualification call'}`;
-  
-  const bookingResult = await handleBookAppointment({
-    name: name,
-    email: email,
-    phone: phone,
-    appointment_date: preferred_time || "next available",
-    appointment_time: "flexible",
-    reason: "Solar consultation",
-    notes: consultationNotes
-  });
-  
-  if (bookingResult.success) {
+  try {
+    // Use your existing appointment booking system
+    const consultationNotes = `Solar consultation - Lead score: ${lead_score || 'N/A'}. ${notes || 'Initial qualification call'}`;
+    
+    const bookingResult = await handleBookAppointment({
+      name: name,
+      email: email,
+      phone: phone,
+      appointment_date: preferred_time || "next available",
+      appointment_time: "10:00 AM", // Default time since preferred_time might be vague
+      reason: "Solar consultation",
+      notes: consultationNotes
+    });
+    
+    if (bookingResult && bookingResult.success) {
+      return {
+        success: true,
+        consultation_scheduled: true,
+        booking_details: bookingResult.appointment_details,
+        message: `Excellent! I've scheduled your solar consultation. Our energy specialist will provide a custom solar analysis for your home.`,
+        next_steps: "You'll receive an email confirmation with all the details"
+      };
+    } else {
+      return {
+        success: true, // Don't fail the whole conversation
+        consultation_scheduled: false,
+        message: `I have all your information and will have our energy specialist call you within 24 hours to schedule your consultation personally.`,
+        next_steps: "Expect a call within 24 hours"
+      };
+    }
+  } catch (error) {
+    console.error('Solar consultation booking error:', error);
     return {
-      success: true,
-      consultation_scheduled: true,
-      booking_details: bookingResult.appointment_details,
-      message: `Excellent! I've scheduled your solar consultation for ${bookingResult.appointment_details.date_time}. Our energy specialist will provide a custom solar analysis for your home.`,
-      next_steps: "You'll receive an email confirmation with all the details"
-    };
-  } else {
-    return {
-      success: false,
+      success: true, // Don't fail the whole conversation
       consultation_scheduled: false,
-      message: `I'll have our energy specialist call you within 24 hours to schedule your consultation personally.`,
+      message: `I have all your information and will have our energy specialist call you within 24 hours to schedule your consultation personally.`,
       next_steps: "Expect a call within 24 hours"
     };
   }

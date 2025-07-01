@@ -227,4 +227,224 @@ module.exports = {
   handleScoreSolarLead,
   handleBookSolarConsultation,
   handleSendSolarInfo
+  handleCalculateFinancingOptions,
+  handleLookupLocalIncentives
 };
+
+async function handleCalculateFinancingOptions(args) {
+  const { 
+    savings_amount, 
+    credit_score_range, 
+    system_cost, 
+    down_payment_preference = "none" 
+  } = args;
+  
+  if (!savings_amount || !system_cost) {
+    return {
+      error: "Need savings amount and system cost to calculate financing options",
+      message: "Let me get your solar savings calculation first, then I can show you financing options."
+    };
+  }
+  
+  // Determine interest rates based on credit score
+  let interestRate = 8.99; // Default rate
+  let loanQualified = true;
+  
+  switch(credit_score_range) {
+    case "excellent":
+      interestRate = 4.99;
+      break;
+    case "good": 
+      interestRate = 6.99;
+      break;
+    case "fair":
+      interestRate = 8.99;
+      break;
+    case "poor":
+      interestRate = 12.99;
+      loanQualified = false;
+      break;
+  }
+  
+  const monthlyUtilityBill = Math.round(savings_amount / 12);
+  
+  // Calculate financing scenarios
+  const scenarios = [];
+  
+  // 1. Cash Purchase
+  scenarios.push({
+    type: "Cash Purchase",
+    upfront_cost: system_cost,
+    monthly_payment: 0,
+    total_cost: system_cost,
+    payback_years: Math.round(system_cost / savings_amount * 10) / 10,
+    lifetime_savings: Math.round((savings_amount * 25) - system_cost),
+    benefits: ["30% federal tax credit", "Immediate 100% ownership", "Maximum lifetime savings", "Increases home value"],
+    best_for: "Homeowners with available cash who want maximum savings"
+  });
+  
+  // 2. Solar Loan (if qualified)
+  if (loanQualified) {
+    const loanAmount = down_payment_preference === "none" ? system_cost : system_cost * 0.8;
+    const monthlyPayment = calculateLoanPayment(loanAmount, interestRate, 20); // 20-year loan
+    const totalCost = monthlyPayment * 240; // 20 years
+    
+    scenarios.push({
+      type: "Solar Loan",
+      upfront_cost: down_payment_preference === "none" ? 0 : system_cost * 0.2,
+      monthly_payment: Math.round(monthlyPayment),
+      total_cost: Math.round(totalCost),
+      interest_rate: interestRate,
+      loan_term: "20 years",
+      net_monthly_savings: Math.round(monthlyUtilityBill - monthlyPayment),
+      lifetime_savings: Math.round((savings_amount * 25) - totalCost),
+      benefits: ["$0 down available", "You own the system", "Eligible for tax credits", "Fixed payments"],
+      best_for: "Most homeowners - combines ownership benefits with affordable payments"
+    });
+  }
+  
+  // 3. Solar Lease/PPA
+  const monthlyLease = Math.round(monthlyUtilityBill * 0.85); // 15% savings
+  scenarios.push({
+    type: "Solar Lease",
+    upfront_cost: 0,
+    monthly_payment: monthlyLease,
+    total_cost: monthlyLease * 300, // 25-year lease
+    immediate_savings: Math.round(monthlyUtilityBill - monthlyLease),
+    escalator: "2.9% annual increase",
+    lifetime_savings: Math.round(savings_amount * 25 * 0.15), // 15% of total savings
+    benefits: ["$0 down", "Maintenance included", "Performance guarantee", "Immediate savings"],
+    best_for: "Homeowners who want solar with no upfront cost or maintenance responsibility"
+  });
+  
+  // Determine best recommendation
+  let recommendation;
+  if (system_cost < savings_amount * 6) {
+    recommendation = loanQualified ? "Solar Loan" : "Solar Lease";
+  } else {
+    recommendation = "Solar Lease";
+  }
+  
+  return {
+    success: true,
+    financing_scenarios: scenarios,
+    recommended_option: recommendation,
+    credit_qualified: loanQualified,
+    message: `Based on your ${credit_score_range} credit and $${Math.round(savings_amount)} annual savings, here are your three financing options. The ${recommendation} typically works best for customers in your situation.`,
+    next_steps: "Our energy specialist can provide exact quotes and help you choose the best financing option during your consultation."
+  };
+}
+
+async function handleLookupLocalIncentives(args) {
+  const { zip_code, utility_company } = args;
+  
+  if (!zip_code) {
+    return {
+      error: "Need zip code to look up local incentives",
+      message: "What's your zip code so I can check for local solar incentives in your area?"
+    };
+  }
+  
+  // Simulate incentive lookup based on zip code patterns
+  // In production, this would hit real APIs for utility data
+  const incentives = getIncentivesByZipCode(zip_code);
+  
+  return {
+    success: true,
+    zip_code: zip_code,
+    ...incentives,
+    message: `Great news! In your area (${zip_code}), you're eligible for ${incentives.total_available_incentives} in solar incentives. This includes the federal tax credit plus ${incentives.local_incentives.length} local programs.`,
+    urgency_factor: incentives.expiring_soon.length > 0 ? `Important: ${incentives.expiring_soon.length} of these incentives expire soon!` : null
+  };
+}
+
+// Helper function for loan payment calculation
+function calculateLoanPayment(principal, annualRate, years) {
+  const monthlyRate = annualRate / 100 / 12;
+  const numPayments = years * 12;
+  
+  if (monthlyRate === 0) return principal / numPayments;
+  
+  const payment = principal * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / 
+                 (Math.pow(1 + monthlyRate, numPayments) - 1);
+  return payment;
+}
+
+// Helper function to simulate incentive lookup
+function getIncentivesByZipCode(zipCode) {
+  // Simulate different regions with different incentives
+  const firstDigit = zipCode.charAt(0);
+  
+  let stateIncentives = [];
+  let utilityIncentives = [];
+  let expiringSoon = [];
+  
+  // Simulate state-based incentives
+  if (["8", "9"].includes(firstDigit)) {
+    // Western states (CO, NM, etc.)
+    stateIncentives = [
+      { name: "State Solar Tax Credit", amount: "$2,500", description: "25% state tax credit up to $2,500" },
+      { name: "Property Tax Exemption", amount: "100%", description: "Solar systems exempt from property tax increases" }
+    ];
+    utilityIncentives = [
+      { name: "Net Metering", rate: "1:1", description: "Full retail credit for excess solar production" },
+      { name: "Utility Rebate", amount: "$0.75/watt", description: "Rebate based on system size" }
+    ];
+  } else if (["0", "1", "2"].includes(firstDigit)) {
+    // Eastern states
+    stateIncentives = [
+      { name: "Solar Renewable Energy Certificates", amount: "$150/MWh", description: "Earn credits for solar production" },
+      { name: "Low-Interest Solar Loans", rate: "3.99%", description: "State-backed financing program" }
+    ];
+    utilityIncentives = [
+      { name: "Time-of-Use Rates", benefit: "Higher credits", description: "Earn more for peak-time solar production" }
+    ];
+  } else {
+    // Central/Southern states  
+    stateIncentives = [
+      { name: "Solar Sales Tax Exemption", amount: "100%", description: "No sales tax on solar equipment" }
+    ];
+    utilityIncentives = [
+      { name: "Net Metering", rate: "Retail rate", description: "Credit for excess solar at retail rates" }
+    ];
+    expiringSoon = [
+      { name: "Utility Solar Rebate", amount: "$1,000", expires: "December 31, 2025", description: "Limited-time utility incentive" }
+    ];
+  }
+  
+  const federalIncentives = [
+    { name: "Federal Solar Tax Credit", amount: "30%", description: "30% tax credit through 2032, then steps down" },
+    { name: "USDA Rural Energy Grant", amount: "Up to $20,000", description: "Available for rural properties", eligibility: "Rural areas only" }
+  ];
+  
+  const totalIncentiveValue = calculateTotalIncentiveValue(federalIncentives, stateIncentives, utilityIncentives, expiringSoon);
+  
+  return {
+    federal_incentives: federalIncentives,
+    state_incentives: stateIncentives,
+    utility_incentives: utilityIncentives,
+    local_incentives: [...stateIncentives, ...utilityIncentives],
+    expiring_soon: expiringSoon,
+    total_available_incentives: totalIncentiveValue,
+    net_metering_available: true,
+    current_utility_rate: "$0.12/kWh",
+    rate_trend: "Increasing 6-7% annually"
+  };
+}
+
+function calculateTotalIncentiveValue(federal, state, utility, expiring) {
+  // Simulate total incentive calculation
+  const federalValue = 5000; // Approximate 30% of typical system
+  const stateValue = state.reduce((sum, incentive) => {
+    const amount = incentive.amount.replace(/[$,]/g, '');
+    return sum + (isNaN(amount) ? 1000 : parseInt(amount));
+  }, 0);
+  const utilityValue = 1500; // Typical utility incentives
+  const expiringValue = expiring.reduce((sum, incentive) => {
+    const amount = incentive.amount.replace(/[$,]/g, '');
+    return sum + (isNaN(amount) ? 0 : parseInt(amount));
+  }, 0);
+  
+  const total = federalValue + stateValue + utilityValue + expiringValue;
+  return `$${total.toLocaleString()}`;
+}

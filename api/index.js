@@ -58,6 +58,26 @@ if (name === 'cancel_booking') {
   return res.json(result);
 }
 
+if (name === 'calculate_solar_savings') {
+ const result = await handleCalculateSolarSavings(args);
+ return res.json(result);
+}
+
+if (name === 'score_solar_lead') {
+ const result = await handleScoreSolarLead(args);
+ return res.json(result);
+}
+
+if (name === 'book_solar_consultation') {
+ const result = await handleBookSolarConsultation(args);
+ return res.json(result);
+}
+
+if (name === 'send_solar_info') {
+ const result = await handleSendSolarInfo(args);
+ return res.json(result);
+}
+
       return res.status(400).json({ error: "Unknown function" });
       
     } catch (error) {

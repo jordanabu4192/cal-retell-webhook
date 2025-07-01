@@ -1,3 +1,10 @@
+const {
+  handleCalculateSolarSavings,
+  handleScoreSolarLead,
+  handleBookSolarConsultation,
+  handleSendSolarInfo
+} = require('./lead-qualification');
+
 module.exports = async (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');

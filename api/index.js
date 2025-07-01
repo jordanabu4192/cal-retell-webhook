@@ -190,10 +190,14 @@ function findBestMatch(bookings, dateStr, timeStr) {
     }
   }
   
-  // Extract hour from time string
-  const timeMatch = searchTime.match(/(\d+)/);
-  const searchHour = timeMatch ? parseInt(timeMatch[1]) : null;
-  const isPM = searchTime.includes('pm');
+// Extract hour from time string (improved)
+let searchHour = null;
+const timePattern = /^(\d+)/; // Match only the first number
+const timeMatch = searchTime.match(timePattern);
+if (timeMatch) {
+  searchHour = parseInt(timeMatch[1]);
+}
+const isPM = searchTime.includes('pm');
   
   console.log('Parsed search:', { searchDay, searchMonth, searchHour, isPM });
   

@@ -637,6 +637,23 @@ async function handleTriggerReminders(args) {
     if (!appointmentsResult.success) {
       return { success: false, error: "Could not fetch appointments" };
     }
+}
+
+    console.log('Testing Retell API key...');
+    const testResult = await fetch('https://api.retellai.com/list-agents', {
+      headers: {
+        'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('Test API status:', testResult.status);
+    const testText = await testResult.text();
+    console.log('Test API response:', testText.substring(0, 200));
+
+    if (!testResult.ok) {
+      return { success: false, error: `API key test failed: ${testResult.status}` };
+    }
 
     const results = [];
     for (const appointment of appointmentsResult.appointments) {

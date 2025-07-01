@@ -34,7 +34,10 @@ module.exports = async (req, res) => {
   const result = await handleCheckAvailability(args);
   return res.json(result);
 }
-      
+      if (name === 'book_appointment') {
+  const result = await handleBookAppointment(args);
+  return res.json(result);
+}
       return res.status(400).json({ error: "Unknown function" });
       
     } catch (error) {
@@ -380,4 +383,146 @@ function getBusinessHoursAvailability(date, requestedStart, requestedEnd) {
     business_hours: hours,
     date: date
   };
+}
+async function handleBookAppointment(args) {
+  const { 
+    name, 
+    email, 
+    phone, 
+    appointment_date, 
+    appointment_time, 
+    reason,
+    notes 
+  } = args;
+  
+  console.log('Booking appointment for:', name, email, appointment_date, appointment_time);
+  
+  // Validate required fields
+  if (!name || !email || !appointment_date || !appointment_time) {
+    return {
+      success: false,
+      error: "I need the patient's name, email, appointment date, and time to book the appointment."
+    };
+  }
+  
+  try {
+    // Convert date and time to ISO format
+    const appointmentDateTime = convertToISODateTime(appointment_date, appointment_time);
+    console.log('Converted to ISO:', appointmentDateTime);
+    
+    // Create the booking request
+    const bookingData = {
+      start: appointmentDateTime,
+      eventTypeId: 2694982, // Your Demo Appointment event type ID
+      attendee: {
+        name: name,
+        email: email,
+        timeZone: "America/Denver"
+      },
+      metadata: {
+        phone: phone || '',
+        reason: reason || 'General appointment',
+        notes: notes || ''
+      }
+    };
+    
+    const response = await fetch('https://api.cal.com/v2/bookings', {
+      method: 'POST',
+      headers: {
+        'cal-api-version': '2024-08-13',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.CAL_API_KEY}`
+      },
+      body: JSON.stringify(bookingData)
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Cal.com booking error:', response.status, errorData);
+      
+      if (response.status === 400) {
+        return {
+          success: false,
+          error: "That time slot is not available. Please choose a different time during our business hours."
+        };
+      }
+      if (response.status === 409) {
+        return {
+          success: false,
+          error: "That time slot is already booked. Please choose another time."
+        };
+      }
+      
+      throw new Error(`Cal.com API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (result.status === 'success') {
+      const booking = result.data;
+      const confirmationTime = new Date(booking.start).toLocaleString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: 'America/Denver'
+      });
+      
+      return {
+        success: true,
+        booking_id: booking.uid,
+        confirmation_message: `Perfect! I've successfully booked your appointment for ${confirmationTime}. Your confirmation number is ${booking.uid}. You'll receive an email confirmation shortly.`,
+        appointment_details: {
+          date_time: confirmationTime,
+          patient_name: name,
+          patient_email: email,
+          booking_id: booking.uid
+        }
+      };
+    } else {
+      return {
+        success: false,
+        error: "There was an issue booking your appointment. Please try again or call our office directly."
+      };
+    }
+    
+  } catch (error) {
+    console.error('Book appointment error:', error);
+    return {
+      success: false,
+      error: "I'm having trouble accessing our booking system right now. Please try again in a few minutes or call our office directly."
+    };
+  }
+}
+
+function convertToISODateTime(dateStr, timeStr) {
+  // Convert "July 8th" and "2 PM" to ISO format with timezone conversion
+  
+  // Get the ISO date
+  const isoDate = convertDateToISO(dateStr);
+  
+  // Parse the time
+  const timeMatch = timeStr.toLowerCase().match(/(\d+)(?::(\d+))?\s*(am|pm)?/);
+  if (!timeMatch) {
+    throw new Error('Invalid time format');
+  }
+  
+  let hour = parseInt(timeMatch[1]);
+  const minute = parseInt(timeMatch[2]) || 0;
+  const isPM = timeStr.toLowerCase().includes('pm');
+  
+  // Convert to 24-hour format
+  if (isPM && hour !== 12) {
+    hour += 12;
+  } else if (!isPM && hour === 12) {
+    hour = 0;
+  }
+  
+  // Convert Mountain Time to UTC (add 6 hours for MDT)
+  const utcHour = (hour + 6) % 24;
+  const utcDate = new Date(`${isoDate}T${utcHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00Z`);
+  
+  return utcDate.toISOString();
 }

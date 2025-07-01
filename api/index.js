@@ -56,8 +56,12 @@ if (name === 'cancel_booking') {
       if (name === 'trigger_reminders') {         
         const result = await handleTriggerReminders(args); 
         return res.json(result);       
-      }       
-                                
+      } 
+      
+      if (name === 'test_retell_api') {
+  const result = await handleTestRetellAPI(args);
+  return res.json(result);
+}                        
       return res.status(400).json({ error: "Unknown function" });
       
     } catch (error) {
@@ -690,5 +694,48 @@ async function handleTriggerReminders(args) {
   } catch (error) {
     console.error('Trigger reminders error:', error);
     return { success: false, error: `Detailed error: ${error.message}` };
+  }
+}
+// Add this new function to your index.js:
+async function handleTestRetellAPI(args) {
+  try {
+    const apiKey = process.env.RETELL_API_KEY;
+    console.log('API Key exists:', !!apiKey);
+    console.log('API Key length:', apiKey ? apiKey.length : 0);
+    
+    // Test 1: Try the agents endpoint
+    const agentsResponse = await fetch('https://api.retellai.com/list-agents', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log('Agents endpoint status:', agentsResponse.status);
+    const agentsText = await agentsResponse.text();
+    console.log('Agents response preview:', agentsText.substring(0, 200));
+    
+    // Test 2: Try v2 agents endpoint
+    const v2AgentsResponse = await fetch('https://api.retellai.com/v2/agents', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log('V2 agents endpoint status:', v2AgentsResponse.status);
+    const v2AgentsText = await v2AgentsResponse.text();
+    console.log('V2 agents response preview:', v2AgentsText.substring(0, 200));
+    
+    return {
+      success: true,
+      tests: {
+        agents_endpoint: { status: agentsResponse.status, preview: agentsText.substring(0, 100) },
+        v2_agents_endpoint: { status: v2AgentsResponse.status, preview: v2AgentsText.substring(0, 100) }
+      }
+    };
+    
+  } catch (error) {
+    return { success: false, error: error.message };
   }
 }

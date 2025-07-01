@@ -498,31 +498,46 @@ async function handleBookAppointment(args) {
 }
 
 function convertToISODateTime(dateStr, timeStr) {
-  // Convert "July 8th" and "2 PM" to ISO format with timezone conversion
-  
-  // Get the ISO date
-  const isoDate = convertDateToISO(dateStr);
-  
-  // Parse the time
-  const timeMatch = timeStr.toLowerCase().match(/(\d+)(?::(\d+))?\s*(am|pm)?/);
-  if (!timeMatch) {
-    throw new Error('Invalid time format');
+  try {
+    console.log(`Converting Mountain Time to UTC: ${dateStr} ${timeStr}`);
+    
+    // Handle both "July 8th" and "2025-07-07" formats
+    let isoDate;
+    if (dateStr.includes('-')) {
+      // Already in YYYY-MM-DD format
+      isoDate = dateStr;
+    } else {
+      // Use existing convertDateToISO function for natural language dates
+      isoDate = convertDateToISO(dateStr);
+    }
+    
+    console.log(`ISO Date: ${isoDate}`);
+    
+    // Parse the time
+    const timeMatch = timeStr.toLowerCase().match(/(\d+)(?::(\d+))?\s*(am|pm)?/);
+    if (!timeMatch) {
+      throw new Error('Invalid time format');
+    }
+    
+    let hour = parseInt(timeMatch[1]);
+    const minute = parseInt(timeMatch[2]) || 0;
+    const isPM = timeStr.toLowerCase().includes('pm');
+    
+    // Convert to 24-hour format
+    if (isPM && hour !== 12) {
+      hour += 12;
+    } else if (!isPM && hour === 12) {
+      hour = 0;
+    }
+    
+    // Convert Mountain Time to UTC (add 6 hours for MDT)
+    const utcHour = (hour + 6) % 24;
+    const utcDate = new Date(`${isoDate}T${utcHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00Z`);
+    
+    console.log(`Final UTC DateTime: ${utcDate.toISOString()}`);
+    return utcDate.toISOString();
+  } catch (error) {
+    console.error('Date conversion error:', error, 'Inputs:', dateStr, timeStr);
+    throw error;
   }
-  
-  let hour = parseInt(timeMatch[1]);
-  const minute = parseInt(timeMatch[2]) || 0;
-  const isPM = timeStr.toLowerCase().includes('pm');
-  
-  // Convert to 24-hour format
-  if (isPM && hour !== 12) {
-    hour += 12;
-  } else if (!isPM && hour === 12) {
-    hour = 0;
-  }
-  
-  // Convert Mountain Time to UTC (add 6 hours for MDT)
-  const utcHour = (hour + 6) % 24;
-  const utcDate = new Date(`${isoDate}T${utcHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00Z`);
-  
-  return utcDate.toISOString();
 }

@@ -608,11 +608,17 @@ async function handleCancelBooking(args) {
 }
 async function handleGetTomorrowAppointments(args) {
   try {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0); // Start of tomorrow
     
-    console.log('Fetching appointments for:', tomorrowStr);
+    const dayAfter = new Date(tomorrow);
+    dayAfter.setDate(tomorrow.getDate() + 1);
+    dayAfter.setHours(0, 0, 0, 0); // Start of day after tomorrow
+    
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    console.log('Looking for appointments on:', tomorrowStr);
     
     const response = await fetch('https://api.cal.com/v2/bookings', {
       headers: {
@@ -623,12 +629,11 @@ async function handleGetTomorrowAppointments(args) {
     });
     
     const result = await response.json();
-    console.log('Cal.com API response:', result);
     
-    // Filter for tomorrow's appointments
+    // Filter for tomorrow's appointments only
     const tomorrowAppointments = result.data?.filter(booking => {
-      const bookingDate = booking.start.split('T')[0];
-      return bookingDate === tomorrowStr && booking.status === 'accepted';
+      const bookingDate = new Date(booking.start);
+      return bookingDate >= tomorrow && bookingDate < dayAfter && booking.status === 'accepted';
     }) || [];
     
     return { success: true, appointments: tomorrowAppointments };

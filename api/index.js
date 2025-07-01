@@ -107,12 +107,16 @@ async function handleRescheduleBooking(args) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.CAL_API_KEY}`
       },
-      body: JSON.stringify({
-        start: utcTime,
-        rescheduledBy: rescheduled_by,
-        reschedulingReason: reason || 'Rescheduled via voice assistant'
-      })
-    });
+     body: JSON.stringify({
+  from_number: '+18134319146',
+  to_number: phone,
+  override_agent_id: 'agent_2647fcddc05b42bbf5096eeae3', // Changed from agent_id
+  retell_llm_dynamic_variables: {
+    patient_name: appointment.attendees[0].name,
+    appointment_date: new Date(appointment.start).toLocaleDateString(),
+    appointment_time: new Date(appointment.start).toLocaleTimeString()
+  }
+})
     
     if (!response.ok) {
       console.error('Cal.com API error:', response.status);
@@ -646,7 +650,7 @@ async function handleTriggerReminders(args) {
       const phone = appointment.metadata?.phone || appointment.attendees[0]?.phoneNumber;
       
       // Trigger Retell outbound call
-      const callResult = await fetch('https://api.retellai.com/v2/call', {
+     const callResult = await fetch('https://api.retellai.com/v2/create-phone-call', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,

@@ -122,22 +122,55 @@ async function handleScoreSolarLead(args) {
   };
 }
 
-// Replace the booking function in lead-qualification.js with this:
-
-// Replace handleBookSolarConsultation in lead-qualification.js with this:
+// Replace the time parsing section in handleBookSolarConsultation with this:
 
 async function handleBookSolarConsultation(args) {
   const { name, email, phone, preferred_time, lead_score, notes } = args;
   
   try {
-    // Convert preferred time to a proper appointment date/time
+    // Enhanced time parsing
     let appointmentDate, appointmentTime;
     
+    // Extract specific time if mentioned (e.g., "12 PM", "twelve PM", "3:30")
+    const timeMatch = preferred_time.match(/(\d{1,2}(?::\d{2})?)\s*(am|pm|AM|PM)|((twelve|one|two|three|four|five|six|seven|eight|nine|ten|eleven))\s*(am|pm|AM|PM)/i);
+    
+    let extractedTime = "10:00 AM"; // Default fallback
+    
+    if (timeMatch) {
+      if (timeMatch[1]) {
+        // Numeric time (e.g., "12", "12:30")
+        let time = timeMatch[1];
+        if (!time.includes(':')) time += ':00';
+        extractedTime = time + ' ' + timeMatch[2].toUpperCase();
+      } else if (timeMatch[3]) {
+        // Word time (e.g., "twelve")
+        const timeWords = {
+          'twelve': '12:00',
+          'one': '1:00',
+          'two': '2:00', 
+          'three': '3:00',
+          'four': '4:00',
+          'five': '5:00',
+          'six': '6:00',
+          'seven': '7:00',
+          'eight': '8:00',
+          'nine': '9:00',
+          'ten': '10:00',
+          'eleven': '11:00'
+        };
+        const timeWord = timeMatch[3].toLowerCase();
+        if (timeWords[timeWord]) {
+          extractedTime = timeWords[timeWord] + ' ' + timeMatch[5].toUpperCase();
+        }
+      }
+    }
+    
+    // Date parsing
     if (preferred_time && preferred_time.toLowerCase().includes('tomorrow')) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
-      appointmentDate = tomorrow.toISOString().split('T')[0]; // YYYY-MM-DD
-      appointmentTime = "12:00 PM"; // Default time
+      appointmentDate = tomorrow.toISOString().split('T')[0];
+      appointmentTime = extractedTime;
     } else if (preferred_time && preferred_time.toLowerCase().includes('this week')) {
       const nextBusinessDay = new Date();
       nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
@@ -146,15 +179,16 @@ async function handleBookSolarConsultation(args) {
         nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
       }
       appointmentDate = nextBusinessDay.toISOString().split('T')[0];
-      appointmentTime = "10:00 AM";
+      appointmentTime = extractedTime;
     } else {
       // Default to next business day
       const nextBusinessDay = new Date();
       nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
       appointmentDate = nextBusinessDay.toISOString().split('T')[0];
-      appointmentTime = "10:00 AM";
+      appointmentTime = extractedTime;
     }
     
+    // Rest of the function stays the same...
     const consultationNotes = `Solar consultation - Lead score: ${lead_score || 'N/A'}. ${notes || 'Initial qualification call'}`;
     
     // Convert date and time to ISO format for Cal.com
@@ -163,7 +197,7 @@ async function handleBookSolarConsultation(args) {
     // Create the booking request directly
     const bookingData = {
       start: appointmentDateTime,
-      eventTypeId: 2694982, // Your Demo Appointment event type ID
+      eventTypeId: 2694982,
       attendee: {
         name: name,
         email: email,
@@ -215,7 +249,7 @@ async function handleBookSolarConsultation(args) {
     
     // If booking fails, graceful fallback
     return {
-      success: true, // Don't fail the whole conversation
+      success: true,
       consultation_scheduled: false,
       message: `I have all your information and will have our energy specialist call you within 24 hours to schedule your consultation personally.`,
       next_steps: "Expect a call within 24 hours"
@@ -224,7 +258,7 @@ async function handleBookSolarConsultation(args) {
   } catch (error) {
     console.error('Solar consultation booking error:', error);
     return {
-      success: true, // Don't fail the whole conversation
+      success: true,
       consultation_scheduled: false,
       message: `I have all your information and will have our energy specialist call you within 24 hours to schedule your consultation personally.`,
       next_steps: "Expect a call within 24 hours"
@@ -232,7 +266,6 @@ async function handleBookSolarConsultation(args) {
   }
 }
 
-// Helper function for date conversion
 function convertToISODateTime(dateStr, timeStr) {
   try {
     // Parse the time
@@ -421,6 +454,8 @@ async function handleCalculateFinancingOptions(args) {
   };
 }
 
+// Replace handleLookupLocalIncentives in lead-qualification.js with this:
+
 async function handleLookupLocalIncentives(args) {
   const { zip_code, utility_company } = args;
   
@@ -431,90 +466,37 @@ async function handleLookupLocalIncentives(args) {
     };
   }
   
+  // Clean and validate zip code
+  const cleanZip = zip_code.toString().replace(/\D/g, ''); // Remove non-digits
+  
+  // Check if zip code is too short
+  if (cleanZip.length < 4) {
+    return {
+      error: "Incomplete zip code",
+      message: `I got ${zip_code}, but I need your complete 5-digit zip code to look up local incentives. Could you repeat your full zip code?`
+    };
+  }
+  
+  // If 4 digits, assume missing last digit and ask for clarification
+  if (cleanZip.length === 4) {
+    return {
+      error: "Incomplete zip code", 
+      message: `I heard ${cleanZip}, but zip codes are typically 5 digits. Could you please provide the complete zip code? For example, is it ${cleanZip}0, ${cleanZip}1, ${cleanZip}2, etc.?`
+    };
+  }
+  
+  // Use first 5 digits if longer than 5
+  const finalZip = cleanZip.substring(0, 5);
+  
   // Simulate incentive lookup based on zip code patterns
-  // In production, this would hit real APIs for utility data
-  const incentives = getIncentivesByZipCode(zip_code);
+  const incentives = getIncentivesByZipCode(finalZip);
   
   return {
     success: true,
-    zip_code: zip_code,
+    zip_code: finalZip,
     ...incentives,
-    message: `Great news! In your area (${zip_code}), you're eligible for ${incentives.total_available_incentives} in solar incentives. This includes the federal tax credit plus ${incentives.local_incentives.length} local programs.`,
+    message: `Great news! In your area (${finalZip}), you're eligible for ${incentives.total_available_incentives} in solar incentives. This includes the federal tax credit plus ${incentives.local_incentives.length} local programs.`,
     urgency_factor: incentives.expiring_soon.length > 0 ? `Important: ${incentives.expiring_soon.length} of these incentives expire soon!` : null
-  };
-}
-
-// Helper function for loan payment calculation
-function calculateLoanPayment(principal, annualRate, years) {
-  const monthlyRate = annualRate / 100 / 12;
-  const numPayments = years * 12;
-  
-  if (monthlyRate === 0) return principal / numPayments;
-  
-  const payment = principal * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / 
-                 (Math.pow(1 + monthlyRate, numPayments) - 1);
-  return payment;
-}
-
-// Helper function to simulate incentive lookup
-function getIncentivesByZipCode(zipCode) {
-  // Simulate different regions with different incentives
-  const firstDigit = zipCode.charAt(0);
-  
-  let stateIncentives = [];
-  let utilityIncentives = [];
-  let expiringSoon = [];
-  
-  // Simulate state-based incentives
-  if (["8", "9"].includes(firstDigit)) {
-    // Western states (CO, NM, etc.)
-    stateIncentives = [
-      { name: "State Solar Tax Credit", amount: "$2,500", description: "25% state tax credit up to $2,500" },
-      { name: "Property Tax Exemption", amount: "100%", description: "Solar systems exempt from property tax increases" }
-    ];
-    utilityIncentives = [
-      { name: "Net Metering", rate: "1:1", description: "Full retail credit for excess solar production" },
-      { name: "Utility Rebate", amount: "$0.75/watt", description: "Rebate based on system size" }
-    ];
-  } else if (["0", "1", "2"].includes(firstDigit)) {
-    // Eastern states
-    stateIncentives = [
-      { name: "Solar Renewable Energy Certificates", amount: "$150/MWh", description: "Earn credits for solar production" },
-      { name: "Low-Interest Solar Loans", rate: "3.99%", description: "State-backed financing program" }
-    ];
-    utilityIncentives = [
-      { name: "Time-of-Use Rates", benefit: "Higher credits", description: "Earn more for peak-time solar production" }
-    ];
-  } else {
-    // Central/Southern states  
-    stateIncentives = [
-      { name: "Solar Sales Tax Exemption", amount: "100%", description: "No sales tax on solar equipment" }
-    ];
-    utilityIncentives = [
-      { name: "Net Metering", rate: "Retail rate", description: "Credit for excess solar at retail rates" }
-    ];
-    expiringSoon = [
-      { name: "Utility Solar Rebate", amount: "$1,000", expires: "December 31, 2025", description: "Limited-time utility incentive" }
-    ];
-  }
-  
-  const federalIncentives = [
-    { name: "Federal Solar Tax Credit", amount: "30%", description: "30% tax credit through 2032, then steps down" },
-    { name: "USDA Rural Energy Grant", amount: "Up to $20,000", description: "Available for rural properties", eligibility: "Rural areas only" }
-  ];
-  
-  const totalIncentiveValue = calculateTotalIncentiveValue(federalIncentives, stateIncentives, utilityIncentives, expiringSoon);
-  
-  return {
-    federal_incentives: federalIncentives,
-    state_incentives: stateIncentives,
-    utility_incentives: utilityIncentives,
-    local_incentives: [...stateIncentives, ...utilityIncentives],
-    expiring_soon: expiringSoon,
-    total_available_incentives: totalIncentiveValue,
-    net_metering_available: true,
-    current_utility_rate: "$0.12/kWh",
-    rate_trend: "Increasing 6-7% annually"
   };
 }
 

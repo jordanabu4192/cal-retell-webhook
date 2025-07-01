@@ -124,39 +124,103 @@ async function handleScoreSolarLead(args) {
 
 // Replace the booking function in lead-qualification.js with this:
 
+// Replace handleBookSolarConsultation in lead-qualification.js with this:
+
 async function handleBookSolarConsultation(args) {
   const { name, email, phone, preferred_time, lead_score, notes } = args;
   
   try {
-    // Use your existing appointment booking system
+    // Convert preferred time to a proper appointment date/time
+    let appointmentDate, appointmentTime;
+    
+    if (preferred_time && preferred_time.toLowerCase().includes('tomorrow')) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      appointmentDate = tomorrow.toISOString().split('T')[0]; // YYYY-MM-DD
+      appointmentTime = "12:00 PM"; // Default time
+    } else if (preferred_time && preferred_time.toLowerCase().includes('this week')) {
+      const nextBusinessDay = new Date();
+      nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
+      // Skip weekends
+      while (nextBusinessDay.getDay() === 0 || nextBusinessDay.getDay() === 6) {
+        nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
+      }
+      appointmentDate = nextBusinessDay.toISOString().split('T')[0];
+      appointmentTime = "10:00 AM";
+    } else {
+      // Default to next business day
+      const nextBusinessDay = new Date();
+      nextBusinessDay.setDate(nextBusinessDay.getDate() + 1);
+      appointmentDate = nextBusinessDay.toISOString().split('T')[0];
+      appointmentTime = "10:00 AM";
+    }
+    
     const consultationNotes = `Solar consultation - Lead score: ${lead_score || 'N/A'}. ${notes || 'Initial qualification call'}`;
     
-    const bookingResult = await handleBookAppointment({
-      name: name,
-      email: email,
-      phone: phone,
-      appointment_date: preferred_time || "next available",
-      appointment_time: "10:00 AM", // Default time since preferred_time might be vague
-      reason: "Solar consultation",
-      notes: consultationNotes
+    // Convert date and time to ISO format for Cal.com
+    const appointmentDateTime = convertToISODateTime(appointmentDate, appointmentTime);
+    
+    // Create the booking request directly
+    const bookingData = {
+      start: appointmentDateTime,
+      eventTypeId: 2694982, // Your Demo Appointment event type ID
+      attendee: {
+        name: name,
+        email: email,
+        timeZone: "America/Denver"
+      },
+      metadata: {
+        phone: phone || '',
+        reason: "Solar consultation",
+        notes: consultationNotes
+      }
+    };
+    
+    const response = await fetch('https://api.cal.com/v2/bookings', {
+      method: 'POST',
+      headers: {
+        'cal-api-version': '2024-08-13',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.CAL_API_KEY}`
+      },
+      body: JSON.stringify(bookingData)
     });
     
-    if (bookingResult && bookingResult.success) {
-      return {
-        success: true,
-        consultation_scheduled: true,
-        booking_details: bookingResult.appointment_details,
-        message: `Excellent! I've scheduled your solar consultation. Our energy specialist will provide a custom solar analysis for your home.`,
-        next_steps: "You'll receive an email confirmation with all the details"
-      };
-    } else {
-      return {
-        success: true, // Don't fail the whole conversation
-        consultation_scheduled: false,
-        message: `I have all your information and will have our energy specialist call you within 24 hours to schedule your consultation personally.`,
-        next_steps: "Expect a call within 24 hours"
-      };
+    if (response.ok) {
+      const result = await response.json();
+      if (result.status === 'success') {
+        const booking = result.data;
+        const confirmationTime = new Date(booking.start).toLocaleString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZone: 'America/Denver'
+        });
+        
+        return {
+          success: true,
+          consultation_scheduled: true,
+          booking_details: {
+            date_time: confirmationTime,
+            booking_id: booking.uid
+          },
+          message: `Excellent! I've scheduled your solar consultation for ${confirmationTime}. Our energy specialist will provide a custom solar analysis for your home.`,
+          next_steps: "You'll receive an email confirmation with all the details"
+        };
+      }
     }
+    
+    // If booking fails, graceful fallback
+    return {
+      success: true, // Don't fail the whole conversation
+      consultation_scheduled: false,
+      message: `I have all your information and will have our energy specialist call you within 24 hours to schedule your consultation personally.`,
+      next_steps: "Expect a call within 24 hours"
+    };
+    
   } catch (error) {
     console.error('Solar consultation booking error:', error);
     return {
@@ -165,6 +229,37 @@ async function handleBookSolarConsultation(args) {
       message: `I have all your information and will have our energy specialist call you within 24 hours to schedule your consultation personally.`,
       next_steps: "Expect a call within 24 hours"
     };
+  }
+}
+
+// Helper function for date conversion
+function convertToISODateTime(dateStr, timeStr) {
+  try {
+    // Parse the time
+    const timeMatch = timeStr.toLowerCase().match(/(\d+)(?::(\d+))?\s*(am|pm)?/);
+    if (!timeMatch) {
+      throw new Error('Invalid time format');
+    }
+    
+    let hour = parseInt(timeMatch[1]);
+    const minute = parseInt(timeMatch[2]) || 0;
+    const isPM = timeStr.toLowerCase().includes('pm');
+    
+    // Convert to 24-hour format
+    if (isPM && hour !== 12) {
+      hour += 12;
+    } else if (!isPM && hour === 12) {
+      hour = 0;
+    }
+    
+    // Convert Mountain Time to UTC (add 6 hours for MDT)
+    const utcHour = (hour + 6) % 24;
+    const utcDate = new Date(`${dateStr}T${utcHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00Z`);
+    
+    return utcDate.toISOString();
+  } catch (error) {
+    console.error('Date conversion error:', error);
+    throw error;
   }
 }
 

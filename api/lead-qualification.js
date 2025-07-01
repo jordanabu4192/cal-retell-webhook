@@ -125,22 +125,35 @@ async function handleScoreSolarLead(args) {
 async function handleBookSolarConsultation(args) {
   const { name, email, phone, preferred_time, lead_score, notes } = args;
   
-  // For demo purposes, we'll simulate booking
-  // In production, this would integrate with solar company's calendar
+  // Use your existing appointment booking system
+  const consultationNotes = `Solar consultation - Lead score: ${lead_score || 'N/A'}. ${notes || 'Initial qualification call'}`;
   
-  return {
-    success: true,
-    consultation_scheduled: true,
-    booking_details: {
-      name: name,
-      email: email,
-      phone: phone,
-      consultation_type: "In-home solar assessment",
-      estimated_duration: "60-90 minutes"
-    },
-    message: `Great! I've scheduled your solar consultation. Our energy specialist will contact you within 24 hours to confirm the exact time and prepare a custom solar analysis for your home.`,
-    next_steps: "Expect a call within 24 hours to confirm your consultation appointment"
-  };
+  const bookingResult = await handleBookAppointment({
+    name: name,
+    email: email,
+    phone: phone,
+    appointment_date: preferred_time || "next available",
+    appointment_time: "flexible",
+    reason: "Solar consultation",
+    notes: consultationNotes
+  });
+  
+  if (bookingResult.success) {
+    return {
+      success: true,
+      consultation_scheduled: true,
+      booking_details: bookingResult.appointment_details,
+      message: `Excellent! I've scheduled your solar consultation for ${bookingResult.appointment_details.date_time}. Our energy specialist will provide a custom solar analysis for your home.`,
+      next_steps: "You'll receive an email confirmation with all the details"
+    };
+  } else {
+    return {
+      success: false,
+      consultation_scheduled: false,
+      message: `I'll have our energy specialist call you within 24 hours to schedule your consultation personally.`,
+      next_steps: "Expect a call within 24 hours"
+    };
+  }
 }
 
 async function handleSendSolarInfo(args) {

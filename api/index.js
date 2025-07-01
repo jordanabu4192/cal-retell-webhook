@@ -541,3 +541,41 @@ function convertToISODateTime(dateStr, timeStr) {
     throw error;
   }
 }
+async function handleCancelBooking(args) {
+  try {
+    console.log('Cancelling booking:', args);
+    
+    const { booking_uid, cancellation_reason = "Cancelled by patient" } = args;
+    
+    if (!booking_uid) {
+      return { success: false, error: "Booking ID is required" };
+    }
+
+    const response = await fetch(`https://api.cal.com/v2/bookings/${booking_uid}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.CAL_API_KEY}`,
+        'Content-Type': 'application/json',
+        'cal-api-version': '2024-08-13'
+      },
+      body: JSON.stringify({
+        cancellationReason: cancellation_reason
+      })
+    });
+
+    const result = await response.json();
+    
+    if (result.status === 'success') {
+      return {
+        success: true,
+        message: `Your appointment has been successfully cancelled.`,
+        booking_details: result.data
+      };
+    } else {
+      return { success: false, error: "Unable to cancel appointment" };
+    }
+  } catch (error) {
+    console.error('Cancel booking error:', error);
+    return { success: false, error: "I'm having trouble cancelling your appointment right now." };
+  }
+}

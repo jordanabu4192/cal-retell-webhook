@@ -119,21 +119,19 @@ async function handleRescheduleBooking(args) {
 })
 });
 
-const result = await callResult.json();
-    
-    if (!response.ok) {
-      console.error('Cal.com API error:', response.status);
-      
-      if (response.status === 404) {
-        return "I couldn't find a booking with that ID. Can you double-check your booking number?";
-      }
-      if (response.status === 400) {
-        return "That time slot might not be available. Can you suggest another time?";
-      }
-      throw new Error(`Cal.com API error: ${response.status}`);
-    }
-    
-    const result = await response.json();
+const callResponse = await callResult.json();
+
+if (!callResult.ok) {
+  console.error('Retell API error:', callResult.status);
+  
+  if (callResult.status === 404) {
+    return "Could not trigger call";
+  }
+  if (callResult.status === 400) {
+    return "Invalid call parameters";
+  }
+  throw new Error(`Retell API error: ${callResult.status}`);
+}
     
     if (result.status === 'success') {
       const booking = result.data;

@@ -107,31 +107,19 @@ async function handleRescheduleBooking(args) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.CAL_API_KEY}`
       },
-     body: JSON.stringify({
-  from_number: '+15056056546',
-  to_number: phone,
-  override_agent_id: 'agent_2647fcddc05b42bbf5096eeae3', // Changed from agent_id
-  retell_llm_dynamic_variables: {
-  patient_name: appointment.attendees[0].name,
-  appointment_date: new Date(appointment.start).toLocaleDateString(),
-  appointment_time: new Date(appointment.start).toLocaleTimeString()
-}
-})
-});
-
-const callResponse = await callResult.json();
-
-if (!callResult.ok) {
-  console.error('Retell API error:', callResult.status);
-  
-  if (callResult.status === 404) {
-    return "Could not trigger call";
-  }
-  if (callResult.status === 400) {
-    return "Invalid call parameters";
-  }
-  throw new Error(`Retell API error: ${callResult.status}`);
-}
+   body: JSON.stringify({
+        start: utcTime,
+        rescheduled_by: rescheduled_by || "user",
+        reason: reason || "Rescheduled by request"
+      })
+    });
+    
+    if (!response.ok) {
+      console.error('Cal.com API error:', response.status);
+      throw new Error(`Cal.com API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
     
     if (result.status === 'success') {
       const booking = result.data;
@@ -661,16 +649,16 @@ if (phone) {
 console.log('Calling phone:', phone);
       
       // Trigger Retell outbound call
-     const callResult = await fetch('https://api.retellai.com/v2/create-phone-call', {
+const callResult = await fetch('https://api.retellai.com/create-phone-call', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          from_number: '+18134319146', // Your Retell number
+          from_number: '+15056056546', // Your Retell number
           to_number: phone,
-          agent_id: 'agent_2647fcddc05b42bbf5096eeae3',
+          override_agent_id: 'agent_2647fcddc05b42bbf5096eeae3',
           retell_llm_dynamic_variables: {
             patient_name: appointment.attendees[0].name,
             appointment_date: new Date(appointment.start).toLocaleDateString(),

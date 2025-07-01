@@ -38,6 +38,17 @@ module.exports = async (req, res) => {
   const result = await handleBookAppointment(args);
   return res.json(result);
 }
+      if (name === 'book_appointment') {
+  const result = await handleBookAppointment(args);
+  return res.json(result);
+}
+      
+      if (name === 'cancel_booking') {
+  const result = await handleCancelBooking(args);
+  return res.json(result);
+      }                                         
+      
+      return res.status(400).json({ error: "Unknown function" });     
       return res.status(400).json({ error: "Unknown function" });
       
     } catch (error) {

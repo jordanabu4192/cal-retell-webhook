@@ -731,3 +731,28 @@ async function handleTriggerReminders(args) {
     return { success: false, error: `Detailed error: ${error.message}` };
   }
 }
+
+async function handleTestCreateCall(args) {
+  try {
+    const { phone_number, agent_id } = args;
+    
+    const response = await fetch('https://api.retellai.com/v2/create-phone-call', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from_number: '+15056056546',
+        to_number: phone_number,
+        override_agent_id: agent_id || 'agent_2647fcddc05b42bbf5096eeae3'
+      })
+    });
+    
+    const result = await response.json();
+    return { success: true, call_result: result };
+  } catch (error) {
+    console.error('Test call error:', error);
+    return { success: false, error: error.message };
+  }
+}

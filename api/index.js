@@ -642,25 +642,30 @@ async function handleTriggerReminders(args) {
 
     const results = [];
     for (const appointment of appointmentsResult.appointments) {
+      // Extract phone from metadata
+      const phone = appointment.metadata?.phone || appointment.attendees[0]?.phoneNumber;
+      
       // Trigger Retell outbound call
-      const callResult = await fetch('https://api.retellai.com/v2/call', {
+      const callResult = await fetch('https://api.retellai.com/v2/create-phone-call', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          agent_id: 'agent_2647fcddc05b42bbf5096eeae3', // Replace with actual agent ID
-          phone_number: appointment.attendees[0].phone,
-          metadata: {
-            appointment_id: appointment.uid,
+          from_number: '+18134319146', // Your Retell number
+          to_number: phone,
+          agent_id: 'agent_2647fcddc05b42bbf5096eeae3',
+          retell_llm_dynamic_variables: {
             patient_name: appointment.attendees[0].name,
-            appointment_time: appointment.start
+            appointment_date: new Date(appointment.start).toLocaleDateString(),
+            appointment_time: new Date(appointment.start).toLocaleTimeString()
           }
         })
       });
       
-      results.push({ patient: appointment.attendees[0].name, status: callResult.status });
+      const result = await callResult.json();
+      results.push({ patient: appointment.attendees[0].name, status: callResult.status, result });
     }
     
     return { success: true, calls_triggered: results.length, results };

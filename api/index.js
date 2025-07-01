@@ -57,7 +57,12 @@ if (name === 'cancel_booking') {
         const result = await handleTriggerReminders(args); 
         return res.json(result);       
       } 
-      
+
+      if (name === 'test_create_call') {
+  const result = await handleTestCreateCall(args);
+  return res.json(result);
+}
+
       if (name === 'test_retell_api') {
   const result = await handleTestRetellAPI(args);
   return res.json(result);
@@ -733,6 +738,38 @@ async function handleTestRetellAPI(args) {
         agents_endpoint: { status: agentsResponse.status, preview: agentsText.substring(0, 100) },
         v2_agents_endpoint: { status: v2AgentsResponse.status, preview: v2AgentsText.substring(0, 100) }
       }
+    };
+    
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+async function handleTestCreateCall(args) {
+  try {
+    const apiKey = process.env.RETELL_API_KEY;
+    
+    // Test the create-phone-call endpoint with minimal data
+    const response = await fetch('https://api.retellai.com/create-phone-call', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from_number: '+15056056546',
+        to_number: '+12397760621',
+        override_agent_id: 'agent_2647fcddc05b42bbf5096eeae3'
+      })
+    });
+    
+    console.log('Create call status:', response.status);
+    const responseText = await response.text();
+    console.log('Create call response:', responseText.substring(0, 500));
+    
+    return {
+      success: true,
+      status: response.status,
+      response: responseText.substring(0, 200)
     };
     
   } catch (error) {

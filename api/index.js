@@ -343,8 +343,21 @@ function convertDateToISO(dateStr) {
 
 function getBusinessHoursAvailability(date, requestedStart, requestedEnd) {
   // Your business hours: 9 AM - 5 PM Monday-Friday, 9 AM - 4 PM Saturday
-  const dateObj = new Date(date);
+  
+  // Convert the date string to a proper Date object
+  let dateObj;
+  if (date.includes('-')) {
+    // Already in ISO format like "2025-07-05"
+    dateObj = new Date(date);
+  } else {
+    // Convert "July 5th" to a date
+    const isoDate = convertDateToISO(date);
+    dateObj = new Date(isoDate);
+  }
+  
   const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday
+  
+  console.log('Date:', date, 'Day of week:', dayOfWeek);
   
   if (dayOfWeek === 0) { // Sunday
     return {

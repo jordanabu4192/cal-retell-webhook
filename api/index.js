@@ -605,16 +605,21 @@ async function handleGetTomorrowAppointments(args) {
   try {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0]; // YYYY-MM-DD
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    
+    console.log('Fetching appointments for:', tomorrowStr);
     
     const response = await fetch(`https://api.cal.com/v1/bookings?dateFrom=${tomorrowStr}&dateTo=${tomorrowStr}`, {
       headers: {
-        'Authorization': `Bearer ${process.env.CAL_API_KEY}`
+        'Authorization': `Bearer ${process.env.CAL_API_KEY}`,
+        'Content-Type': 'application/json'
       }
     });
     
     const result = await response.json();
-    return { success: true, appointments: result.bookings || [] };
+    console.log('Cal.com API response:', result);
+    
+    return { success: true, appointments: result.bookings || [], debug: result };
   } catch (error) {
     console.error('Error fetching appointments:', error);
     return { success: false, error: "Could not fetch appointments" };

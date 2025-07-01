@@ -638,22 +638,6 @@ async function handleTriggerReminders(args) {
       return { success: false, error: "Could not fetch appointments" };
     }
 
-    console.log('Testing Retell API key...');
-    const testResult = await fetch('https://api.retellai.com/list-agents', {
-      headers: {
-        'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    console.log('Test API status:', testResult.status);
-    const testText = await testResult.text();
-    console.log('Test API response:', testText.substring(0, 200));
-
-    if (!testResult.ok) {
-      return { success: false, error: `API key test failed: ${testResult.status}` };
-    }
-
     const results = [];
     for (const appointment of appointmentsResult.appointments) {
       // Extract phone from metadata and convert to E.164
@@ -683,7 +667,17 @@ async function handleTriggerReminders(args) {
         })
       });
       
-      const result = await callResult.json();
+      console.log('Call response status:', callResult.status);
+      const responseText = await callResult.text();
+      console.log('Call response text:', responseText.substring(0, 200));
+      
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        result = { error: 'Invalid JSON response', responseText: responseText.substring(0, 100) };
+      }
+      
       results.push({ 
         patient: appointment.attendees[0].name, 
         phone: phone,

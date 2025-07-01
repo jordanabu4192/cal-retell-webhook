@@ -574,7 +574,9 @@ async function handleCancelBooking(args) {
       })
     });
 
+    console.log('Cal.com response status:', response.status);
     const result = await response.json();
+    console.log('Cal.com response:', result);
     
     if (result.status === 'success') {
       return {

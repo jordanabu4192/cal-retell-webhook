@@ -638,7 +638,7 @@ async function handleTriggerReminders(args) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          agent_id: 'YOUR_REMINDER_AGENT_ID', // Replace with actual agent ID
+          agent_id: 'agent_2647fcddc05b42bbf5096eeae3', // Replace with actual agent ID
           phone_number: appointment.attendees[0].phone,
           metadata: {
             appointment_id: appointment.uid,

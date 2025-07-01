@@ -2,7 +2,9 @@ const {
   handleCalculateSolarSavings,
   handleScoreSolarLead,
   handleBookSolarConsultation,
-  handleSendSolarInfo
+  handleSendSolarInfo,
+  handleCalculateFinancingOptions,
+  handleLookupLocalIncentives
 } = require('./lead-qualification');
 
 module.exports = async (req, res) => {
@@ -68,6 +70,16 @@ if (name === 'cancel_booking') {
 if (name === 'calculate_solar_savings') {
  const result = await handleCalculateSolarSavings(args);
  return res.json(result);
+}
+
+if (name === 'calculate_financing_options') {
+  const result = await handleCalculateFinancingOptions(args);
+  return res.json(result);
+}
+
+if (name === 'lookup_local_incentives') {
+  const result = await handleLookupLocalIncentives(args);
+  return res.json(result);
 }
 
 if (name === 'score_solar_lead') {

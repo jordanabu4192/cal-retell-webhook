@@ -46,7 +46,7 @@ if (!req.body.name && req.body.date !== undefined) {
   return res.json(result);
 }
 
-if (!req.body.name && req.body.name !== undefined && req.body.email !== undefined && req.body.preferred_time !== undefined) {
+if (req.body.name !== undefined && req.body.email !== undefined && req.body.preferred_time !== undefined) {
   // This is a book_solar_consultation call
   const result = await handleBookSolarConsultation(req.body);
   return res.json(result);

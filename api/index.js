@@ -27,6 +27,31 @@ module.exports = async (req, res) => {
       
       const { name, args } = req.body;
       
+// Handle direct parameter format from Retell
+if (!req.body.name && req.body.monthly_electric_bill !== undefined) {
+  // This is a calculate_solar_savings call
+  const result = await handleCalculateSolarSavings(req.body);
+  return res.json(result);
+}
+
+if (!req.body.name && req.body.homeowner !== undefined) {
+  // This is a score_solar_lead call  
+  const result = await handleScoreSolarLead(req.body);
+  return res.json(result);
+}
+
+if (!req.body.name && req.body.date !== undefined) {
+  // This is a check_availability call
+  const result = await handleCheckAvailability(req.body);
+  return res.json(result);
+}
+
+if (!req.body.name && req.body.name !== undefined && req.body.email !== undefined && req.body.preferred_time !== undefined) {
+  // This is a book_solar_consultation call
+  const result = await handleBookSolarConsultation(req.body);
+  return res.json(result);
+}
+
       if (name === 'reschedule_booking') {
         const result = await handleRescheduleBooking(args);
         return res.json(result);

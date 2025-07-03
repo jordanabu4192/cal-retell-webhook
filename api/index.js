@@ -1,4 +1,5 @@
-const chrono = require('chrono-node'); // Add this import at the top
+const chrono = require('chrono-node');
+const { google } = require('googleapis');
 
 const {
   handleCalculateSolarSavings,
@@ -9,6 +10,8 @@ const {
   handleLookupLocalIncentives
 } = require('./lead-qualification');
 
+const gmail = google.gmail({ version: 'v1' });
+
 module.exports = async (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -18,6 +21,11 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+  
+  if (name === 'send_confirmation_email') {
+  const result = await handleSendConfirmationEmail(args);
+  return res.json(result);
+}
   
   if (req.method === 'GET') {
     return res.json({ message: 'Cal.com Retell webhook server is running!' });
@@ -951,4 +959,203 @@ function parseToUTC(dateTimeString, timezone = 'America/Denver') {
   const utcString = utcTime.toISOString();
   console.log(`[parseToUTC] Final UTC result: ${utcString}`);
   return utcString;
+}
+async function authenticateGmail() {
+  const credentials = {
+    type: 'service_account',
+    project_id: process.env.GOOGLE_PROJECT_ID,
+    private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID,
+    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+    token_uri: 'https://oauth2.googleapis.com/token',
+  };
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: credentials,
+    scopes: ['https://www.googleapis.com/auth/gmail.send'],
+  });
+
+  return auth;
+}
+
+async function handleSendConfirmationEmail(args) {
+  const { 
+    email, 
+    name, 
+    appointment_date, 
+    appointment_time, 
+    business_name = "Crescent Family Dental",
+    business_phone = "813-431-9146",
+    business_address = "441 Cordova Lane, Santa Fe, New Mexico 87505",
+    appointment_type = "appointment",
+    additional_info = "",
+    booking_id = ""
+  } = args;
+
+  console.log('[send_confirmation_email] Sending to:', email, name);
+
+  // Validate required fields
+  if (!email || !name || !appointment_date || !appointment_time) {
+    return {
+      success: false,
+      error: "Missing required fields",
+      message: "I need the patient's email, name, appointment date, and time to send a confirmation."
+    };
+  }
+
+  try {
+    const auth = await authenticateGmail();
+    
+    // Create email content
+    const subject = `${appointment_type.charAt(0).toUpperCase() + appointment_type.slice(1)} Confirmation - ${appointment_date} at ${appointment_time}`;
+    
+    const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #2c5aa0; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }
+        .appointment-details { background: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
+        .button { background: #2c5aa0; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>${business_name}</h1>
+            <p>Appointment Confirmation</p>
+        </div>
+        
+        <div class="content">
+            <h2>Hello ${name}!</h2>
+            <p>Your ${appointment_type} has been confirmed. We look forward to seeing you!</p>
+            
+            <div class="appointment-details">
+                <h3>📅 Appointment Details</h3>
+                <p><strong>Date:</strong> ${appointment_date}</p>
+                <p><strong>Time:</strong> ${appointment_time}</p>
+                <p><strong>Type:</strong> ${appointment_type.charAt(0).toUpperCase() + appointment_type.slice(1)}</p>
+                ${booking_id ? `<p><strong>Confirmation #:</strong> ${booking_id}</p>` : ''}
+            </div>
+            
+            <div class="appointment-details">
+                <h3>📍 Location</h3>
+                <p>${business_address}</p>
+                <p><strong>Phone:</strong> ${business_phone}</p>
+            </div>
+            
+            ${additional_info ? `
+            <div class="appointment-details">
+                <h3>ℹ️ Additional Information</h3>
+                <p>${additional_info}</p>
+            </div>
+            ` : ''}
+            
+            <div class="appointment-details">
+                <h3>📋 What to Bring</h3>
+                <ul>
+                    <li>Photo ID</li>
+                    <li>Insurance card (if applicable)</li>
+                    <li>List of current medications</li>
+                    <li>Arrive 15 minutes early</li>
+                </ul>
+            </div>
+            
+            <p>Need to reschedule or have questions? Call us at ${business_phone}.</p>
+        </div>
+        
+        <div class="footer">
+            <p>${business_name} | ${business_phone}</p>
+            <p>This is an automated confirmation. Please do not reply to this email.</p>
+        </div>
+    </div>
+</body>
+</html>`;
+
+    const textBody = `
+${business_name} - Appointment Confirmation
+
+Hello ${name}!
+
+Your ${appointment_type} has been confirmed:
+
+📅 Date: ${appointment_date}
+🕐 Time: ${appointment_time}
+${booking_id ? `🎫 Confirmation #: ${booking_id}` : ''}
+
+📍 Location:
+${business_address}
+Phone: ${business_phone}
+
+What to bring:
+• Photo ID
+• Insurance card (if applicable)  
+• List of current medications
+• Arrive 15 minutes early
+
+${additional_info ? `\nAdditional Information:\n${additional_info}` : ''}
+
+Need to reschedule? Call us at ${business_phone}.
+
+Thank you!
+${business_name}
+`;
+
+    // Create email message
+    const message = [
+      `To: ${email}`,
+      `From: ${process.env.GMAIL_FROM_ADDRESS || 'noreply@crescentfamilydental.com'}`,
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/alternative; boundary="boundary"',
+      '',
+      '--boundary',
+      'Content-Type: text/plain; charset=UTF-8',
+      '',
+      textBody,
+      '',
+      '--boundary',
+      'Content-Type: text/html; charset=UTF-8',
+      '',
+      htmlBody,
+      '',
+      '--boundary--'
+    ].join('\n');
+
+    const encodedMessage = Buffer.from(message).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+    // Send email
+    const response = await gmail.users.messages.send({
+      auth: auth,
+      userId: 'me',
+      requestBody: {
+        raw: encodedMessage
+      }
+    });
+
+    console.log('[send_confirmation_email] Email sent successfully:', response.data.id);
+
+    return {
+      success: true,
+      message: `Confirmation email sent successfully to ${email}.`,
+      email_id: response.data.id,
+      email_sent_to: email,
+      subject: subject
+    };
+
+  } catch (error) {
+    console.error('[send_confirmation_email] Error:', error);
+    
+    return {
+      success: false,
+      error: error.message,
+      message: "I'm having trouble sending the confirmation email right now. Your appointment is still confirmed."
+    };
+  }
 }

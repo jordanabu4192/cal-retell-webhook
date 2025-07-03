@@ -20,11 +20,6 @@ module.exports = async (req, res) => {
     return res.status(200).end();
   }
   
-  if (name === 'send_confirmation_email') {
-  const result = await handleSendConfirmationEmail(args);
-  return res.json(result);
-}
-  
   if (req.method === 'GET') {
     return res.json({ message: 'Cal.com Retell webhook server is running!' });
   }
@@ -136,6 +131,11 @@ if (name === 'book_solar_consultation') {
 if (name === 'send_solar_info') {
  const result = await handleSendSolarInfo(args);
  return res.json(result);
+}
+
+if (name === 'send_confirmation_email') {
+  const result = await handleSendConfirmationEmail(args);
+  return res.json(result);
 }
 
 if (name === 'send_confirmation_email') {

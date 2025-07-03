@@ -388,11 +388,13 @@ console.log('[check_availability] Using API key:', process.env.CAL_API_KEY ? 'âœ
 
 
   try {
-    const eventTypeId = 2694982;
-    const startDate = date;
-    const endDate = date;
+  const eventTypeId = 2694982;
+const startDate = date;
+const endDate = date;
 
-const calApiUrl = `https://api.cal.com/v2/slots?eventTypeId=2694982&start=${startDate}&end=${startDate}&timeZone=${timezone}`;
+const calApiUrl = `https://api.cal.com/v2/slots?eventTypeId=${eventTypeId}&start=${startDate}&end=${endDate}&timeZone=${timezone}`;
+console.log('[check_availability] Fetching slots from:', calApiUrl);
+
 const response = await fetch(calApiUrl, {
   method: 'GET',
   headers: {

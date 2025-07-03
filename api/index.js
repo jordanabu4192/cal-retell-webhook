@@ -382,7 +382,9 @@ const isPM = searchTime.includes('pm');
 async function handleCheckAvailability(args) {
   const { date, start_time, timezone = "America/Denver" } = args;
 
-  console.log('Checking Cal.com availability for:', date, start_time, timezone);
+console.log('[check_availability] Fetching slots from:', url);
+console.log('[check_availability] Using API key:', process.env.CAL_API_KEY ? '✔️ Present' : '❌ Missing');
+
 
   try {
     const eventTypeId = 2694982;

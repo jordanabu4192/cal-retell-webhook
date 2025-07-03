@@ -976,6 +976,10 @@ async function authenticateGmail() {
   return auth;
 }
 
+// Replace the Gmail imports at the top with:
+const sgMail = require('@sendgrid/mail');
+
+// Replace the entire handleSendConfirmationEmail function with this:
 async function handleSendConfirmationEmail(args) {
   const { 
     email, 
@@ -1002,9 +1006,9 @@ async function handleSendConfirmationEmail(args) {
   }
 
   try {
-    const auth = await authenticateGmail();
-    const gmail = google.gmail({ version: 'v1', auth: auth });
-
+    // Set SendGrid API key
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    
     // Create email content
     const subject = `${appointment_type.charAt(0).toUpperCase() + appointment_type.slice(1)} Confirmation - ${appointment_date} at ${appointment_time}`;
     
@@ -1019,7 +1023,6 @@ async function handleSendConfirmationEmail(args) {
         .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }
         .appointment-details { background: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
         .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
-        .button { background: #2c5aa0; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0; }
     </style>
 </head>
 <body>
@@ -1105,43 +1108,22 @@ ${business_name}
 `;
 
     // Create email message
-    const message = [
-      `To: ${email}`,
-      `From: ${process.env.GMAIL_FROM_ADDRESS || 'noreply@crescentfamilydental.com'}`,
-      `Subject: ${subject}`,
-      'MIME-Version: 1.0',
-      'Content-Type: multipart/alternative; boundary="boundary"',
-      '',
-      '--boundary',
-      'Content-Type: text/plain; charset=UTF-8',
-      '',
-      textBody,
-      '',
-      '--boundary',
-      'Content-Type: text/html; charset=UTF-8',
-      '',
-      htmlBody,
-      '',
-      '--boundary--'
-    ].join('\n');
-
-    const encodedMessage = Buffer.from(message).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const msg = {
+      to: email,
+      from: process.env.FROM_EMAIL_ADDRESS || 'noreply@rarifiedsolutions.com',
+      subject: subject,
+      text: textBody,
+      html: htmlBody,
+    };
 
     // Send email
-    const response = await gmail.users.messages.send({
-      auth: auth,
-      userId: 'me',
-      requestBody: {
-        raw: encodedMessage
-      }
-    });
+    const response = await sgMail.send(msg);
 
-    console.log('[send_confirmation_email] Email sent successfully:', response.data.id);
+    console.log('[send_confirmation_email] Email sent successfully');
 
     return {
       success: true,
       message: `Confirmation email sent successfully to ${email}.`,
-      email_id: response.data.id,
       email_sent_to: email,
       subject: subject
     };
@@ -1156,4 +1138,5 @@ ${business_name}
     };
   }
 }
-// Force rebuild
+
+// Remove the Gmail authentication function entirely - no longer needed

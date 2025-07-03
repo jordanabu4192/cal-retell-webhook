@@ -380,115 +380,84 @@ const isPM = searchTime.includes('pm');
   return bookings.length > 0 ? bookings[0] : null;
 }
 async function handleCheckAvailability(args) {
-  const { date, start_time, timezone = "America/Denver" } = args;
-
-  const eventTypeId = 2694982;
-  const startDateTime = `${date}T00:00:00`;
-  const endDateTime = `${date}T23:59:59`;
-
-  const url = `https://api.cal.com/v1/slots?eventTypeId=${eventTypeId}&startTime=${startDateTime}&endTime=${endDateTime}&timeZone=${encodeURIComponent(timezone)}`;
-
-  console.log("[check_availability] Requesting:", url);
-  console.log("[check_availability] API Key Present:", !!process.env.CAL_API_KEY);
-
+  const { date, start_time, end_time, timezone = "America/Denver" } = args;
+  
+  console.log('Checking availability for:', date, start_time, timezone);
+  
   try {
+    // Convert date to proper ISO format
+    const isoDate = convertDateToISO(date);
+    const startDateTime = `${isoDate}T00:00:00Z`;
+    const endDateTime = `${isoDate}T23:59:59Z`;
+    
+    const url = `https://api.cal.com/v2/slots?eventTypeId=2694982&startTime=${startDateTime}&endTime=${endDateTime}`;
+    
+    console.log('Calling Cal.com API:', url);
+    
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${process.env.CAL_API_KEY}`
+        'cal-api-version': '2024-08-13',
+        'Authorization': `Bearer ${process.env.CAL_API_KEY}`
       }
     });
-
+    
     if (!response.ok) {
-      console.error("Cal.com slots error:", response.status);
-      return { available: false, error: "Could not fetch slots from Cal.com." };
-    }
-
-    const slotData = await response.json();
-    const flatSlots = (slotData.slots?.[date] || []).map(slot => new Date(slot.time));
-
-    if (flatSlots.length === 0) {
+      console.error('Cal.com slots error:', response.status);
+      const errorText = await response.text().catch(() => 'Unknown error');
+      console.error('Error details:', errorText);
+      
+      // Fallback to business hours logic
+      const businessHours = getBusinessHoursAvailability(date, start_time, end_time);
       return {
-        available: false,
-        available_slots: [],
-        message: 'There are no available slots on this day.',
-        date_checked: date
+        available: businessHours.available,
+        availability_details: businessHours,
+        date_checked: date,
+        note: "Using business hours (Cal.com API unavailable)"
       };
     }
-
-    const [reqHour, reqMinute] = start_time.split(':').map(t => parseInt(t));
-    const requestedStart = new Date(`${date}T${reqHour.toString().padStart(2, '0')}:${reqMinute.toString().padStart(2, '0')}:00`);
-    const requestedEnd = new Date(requestedStart.getTime() + 45 * 60000);
-
-    let exactMatchFound = false;
-    let suggestedSlot = null;
-
-    for (let i = 0; i <= flatSlots.length - 3; i++) {
-      const windowStart = flatSlots[i];
-      const windowEnd = new Date(windowStart.getTime() + 45 * 60000);
-
-      // Check for at least 3 back-to-back 15-min slots (totaling 45 min)
-      if (
-        flatSlots[i + 1] &&
-        flatSlots[i + 2] &&
-        (flatSlots[i + 1].getTime() - windowStart.getTime() === 15 * 60000) &&
-        (flatSlots[i + 2].getTime() - flatSlots[i + 1].getTime() === 15 * 60000)
-      ) {
-        if (
-          windowStart.getTime() === requestedStart.getTime()
-        ) {
-          exactMatchFound = true;
-          break;
-        }
-
-        if (!suggestedSlot) {
-          suggestedSlot = windowStart;
-        }
-      }
-    }
-
-    if (exactMatchFound) {
+    
+    const slotData = await response.json();
+    console.log('Slots response:', slotData);
+    
+    // Check if we have available slots
+    const hasSlots = slotData.slots && Object.keys(slotData.slots).length > 0;
+    
+    if (hasSlots) {
       return {
         available: true,
-        message: `A 45-minute slot is available at your requested time.`,
-        available_slots: flatSlots,
+        availability_details: {
+          message: "Time slots are available on this date",
+          business_hours: "9:00 AM to 5:00 PM",
+          slots_found: true
+        },
         date_checked: date
       };
-    }
-
-    if (suggestedSlot) {
-      const localSuggestedTime = suggestedSlot.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: timezone
-      });
-
+    } else {
       return {
         available: false,
-        suggested: true,
-        message: `Your requested time is not available, but the next available 45-minute slot is at ${localSuggestedTime}.`,
-        suggested_time: suggestedSlot.toISOString(),
-        available_slots: flatSlots,
+        availability_details: {
+          message: "No available time slots on this date",
+          business_hours: "9:00 AM to 5:00 PM", 
+          slots_found: false
+        },
         date_checked: date
       };
     }
-
-    return {
-      available: false,
-      message: `There are no 45-minute slots available at your requested time, and no other options found for that day.`,
-      available_slots: flatSlots,
-      date_checked: date
-    };
-
+    
   } catch (error) {
-    console.error("Availability check error:", error);
+    console.error('Check availability error:', error);
+    
+    // Fallback to business hours
+    const businessHours = getBusinessHoursAvailability(date, start_time, end_time);
     return {
-      available: false,
-      error: "I'm having trouble checking availability. Please try again."
+      available: businessHours.available,
+      availability_details: businessHours,
+      date_checked: date,
+      note: "Using business hours (API error)"
     };
   }
 }
-
 function convertDateToISO(dateStr) {
   // Simple conversion for common date formats
   const today = new Date();

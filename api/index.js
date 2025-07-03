@@ -383,7 +383,6 @@ async function handleCheckAvailability(args) {
   const { date, start_time, timezone = "America/Denver" } = args;
 
 console.log('[check_availability] Using CAL_API_KEY:', process.env.CAL_API_KEY ? '✔️ Present' : '❌ Missing');
-console.log('[check_availability] Fetching slots from:', calApiUrl);
 console.log('[check_availability] Using API key:', process.env.CAL_API_KEY ? '✔️ Present' : '❌ Missing');
 
 

@@ -9,7 +9,7 @@
     "express": "^5.1.0",
     "retell-sdk": "^4.38.0",
     "chrono-node": "^2.7.6",
-    "googleapis": "^131.0.0"
+    "googleapis": "^131.0.0",
     "@sendgrid/mail": "^8.1.3",
   }
 }

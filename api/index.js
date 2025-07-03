@@ -590,7 +590,21 @@ try {
   
   console.log('Original date/time:', appointment_date, appointment_time);
   console.log('Converted to ISO:', appointmentDateTime);
-    
+
+  const bookingData = {
+  start: appointmentDateTime,
+  eventTypeId: 2694982,
+  attendee: {
+    name: name,
+    email: email,
+    timeZone: "America/Denver"
+  },
+  metadata: {
+    phone: phone || '',
+    reason: reason || 'General appointment',
+    notes: notes || ''
+  }
+};
     const response = await fetch('https://api.cal.com/v2/bookings', {
       method: 'POST',
       headers: {

@@ -4,7 +4,7 @@
   "main": "api/index.js",
   "scripts": {
     "start": "node api/index.js"
-  {
+  },
   "dependencies": {
     "express": "^5.1.0",
     "retell-sdk": "^4.38.0",

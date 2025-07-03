@@ -703,15 +703,20 @@ async function handleBookAppointment(args) {
 
 // ---- UNCHANGED: Cancel Booking ----
 async function handleCancelBooking(args) {
-  try {
-    console.log('Cancelling booking:', args);
-    
-    const { booking_uid, cancellation_reason = "Cancelled by patient" } = args;
-    
-    if (!booking_uid) {
-      return { success: false, error: "Booking ID is required" };
-    }
+  const { booking_uid, cancellation_reason = "Cancelled by patient" } = args;
+  
+  console.log('Cancelling booking:', args);
+  
+  // Validate required fields
+  if (!booking_uid) {
+    return {
+      success: false,
+      error: "Booking ID is required",
+      message: "I need your booking ID to cancel the appointment. Can you provide that?"
+    };
+  }
 
+  try {
     const response = await fetch(`https://api.cal.com/v2/bookings/${booking_uid}/cancel`, {
       method: 'POST',
       headers: {
@@ -725,21 +730,62 @@ async function handleCancelBooking(args) {
     });
 
     console.log('Cal.com response status:', response.status);
+    
+    if (!response.ok) {
+      console.error('Cal.com API error:', response.status);
+      
+      if (response.status === 404) {
+        return {
+          success: false,
+          error: "Booking not found",
+          message: "I couldn't find a booking with that ID. Can you double-check your booking number?"
+        };
+      }
+      
+      if (response.status === 400) {
+        return {
+          success: false,
+          error: "Cannot cancel booking",
+          message: "This appointment cannot be cancelled. It may have already been cancelled or completed."
+        };
+      }
+      
+      return {
+        success: false,
+        error: `Cal.com API error: ${response.status}`,
+        message: "I'm having trouble with the booking system right now. Please try again in a moment."
+      };
+    }
+    
     const result = await response.json();
     console.log('Cal.com response:', result);
     
     if (result.status === 'success') {
+      // Get appointment details if available
+      const appointmentInfo = result.data ? ` (Booking ID: ${result.data.uid || booking_uid})` : ` (Booking ID: ${booking_uid})`;
+      
       return {
         success: true,
-        message: `Your appointment has been successfully cancelled.`,
-        booking_details: result.data
+        message: `Your appointment has been successfully cancelled${appointmentInfo}. You should receive a cancellation confirmation email shortly.`,
+        booking_details: result.data,
+        cancellation_reason: cancellation_reason
       };
     } else {
-      return { success: false, error: "Unable to cancel appointment" };
+      return {
+        success: false,
+        error: "Cancellation failed",
+        message: "I'm having trouble cancelling your appointment right now. Please try again or contact our office directly."
+      };
     }
+    
   } catch (error) {
     console.error('Cancel booking error:', error);
-    return { success: false, error: "I'm having trouble cancelling your appointment right now." };
+    
+    return {
+      success: false,
+      error: error.message,
+      message: "I'm having trouble connecting to the booking system. Please try again in a few minutes or contact our office directly."
+    };
   }
 }
 

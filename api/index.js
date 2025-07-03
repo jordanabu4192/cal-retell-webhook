@@ -382,83 +382,32 @@ const isPM = searchTime.includes('pm');
 async function handleCheckAvailability(args) {
   const { date, start_time, timezone = "America/Denver" } = args;
 
+  const eventTypeId = 2694982;
+  const startDateTime = `${date}T00:00:00`;
+  const endDateTime = `${date}T23:59:59`;
+
+  const url = `https://api.cal.com/v1/slots?eventTypeId=${eventTypeId}&startTime=${startDateTime}&endTime=${endDateTime}&timeZone=${encodeURIComponent(timezone)}`;
+
+  console.log("[check_availability] Requesting:", url);
+  console.log("[check_availability] API Key Present:", !!process.env.CAL_API_KEY);
+
   try {
-    const startDateTime = `${date}T00:00:00`;
-    const endDateTime = `${date}T23:59:00`;
-
-    const url = `https://api.cal.com/v1/slots?eventTypeSlug=demo-appointment&usernameList=rarifiedsolutions&startTime=${startDateTime}&endTime=${endDateTime}&timeZone=${timezone}&apiKey=${process.env.CAL_API_KEY}`;
-
-    console.log('[check_availability] Fetching from:', url);
-
-    const response = await fetch(url, { method: 'GET' });
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${process.env.CAL_API_KEY}`
+      }
+    });
 
     if (!response.ok) {
-      console.error('Cal.com slots error:', response.statusText);
-      return { available: false, error: 'Could not fetch slots from Cal.com.' };
-    }
-
-    const data = await response.json();
-    const slots = data.slots?.[date] || [];
-
-    const requestedStart = new Date(`${date}T${start_time}`);
-    const requestedEnd = new Date(requestedStart.getTime() + 45 * 60000);
-
-    let exactMatch = false;
-    let suggestedSlot = null;
-
-    for (let i = 0; i < slots.length; i++) {
-      const slotStart = new Date(slots[i].time);
-      const slotEnd = new Date(slotStart.getTime() + 45 * 60000);
-
-      if (
-        slotStart.getTime() === requestedStart.getTime()
-      ) {
-        exactMatch = true;
-        break;
-      }
-
-      if (!suggestedSlot && slotEnd.getTime() - slotStart.getTime() >= 45 * 60000) {
-        suggestedSlot = slotStart;
-      }
-    }
-
-    if (exactMatch) {
-      return {
-        available: true,
-        message: 'Exact 45-minute slot is available.',
-        date_checked: date
-      };
-    }
-
-    if (suggestedSlot) {
-      return {
-        available: false,
-        suggested: true,
-        suggested_time: suggestedSlot.toISOString(),
-        message: `Your requested time is not available, but a 45-minute slot is available at ${suggestedSlot.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
-      };
-    }
-
-    return {
-      available: false,
-      message: 'No 45-minute slot found for that day.'
-    };
-
-  } catch (err) {
-    console.error('[check_availability] Error:', err);
-    return { available: false, error: 'Error occurred during availability check.' };
-  }
-});
-
-    if (!response.ok) {
-      console.error('Cal.com slots error:', response.status);
-      return { available: false, error: 'Could not fetch slots from Cal.com.' };
+      console.error("Cal.com slots error:", response.status);
+      return { available: false, error: "Could not fetch slots from Cal.com." };
     }
 
     const slotData = await response.json();
-    const slots = slotData.slots || [];
+    const flatSlots = (slotData.slots?.[date] || []).map(slot => new Date(slot.time));
 
-    if (slots.length === 0) {
+    if (flatSlots.length === 0) {
       return {
         available: false,
         available_slots: [],
@@ -467,34 +416,34 @@ async function handleCheckAvailability(args) {
       };
     }
 
-    // Convert requested start time to UTC
-    const [reqHour, reqMinute] = start_time.split(':').map(n => parseInt(n));
+    const [reqHour, reqMinute] = start_time.split(':').map(t => parseInt(t));
     const requestedStart = new Date(`${date}T${reqHour.toString().padStart(2, '0')}:${reqMinute.toString().padStart(2, '0')}:00`);
-    const utcStart = convertMountainToUTC(`${date}T${start_time}`);
     const requestedEnd = new Date(requestedStart.getTime() + 45 * 60000);
 
     let exactMatchFound = false;
     let suggestedSlot = null;
 
-    for (const slot of slots) {
-      const slotStart = new Date(slot.start);
-      const slotEnd = new Date(slot.end);
+    for (let i = 0; i <= flatSlots.length - 3; i++) {
+      const windowStart = flatSlots[i];
+      const windowEnd = new Date(windowStart.getTime() + 45 * 60000);
 
-      // Check if requested time fits inside this slot
+      // Check for at least 3 back-to-back 15-min slots (totaling 45 min)
       if (
-        slotStart.getTime() <= requestedStart.getTime() &&
-        slotEnd.getTime() >= requestedEnd.getTime()
+        flatSlots[i + 1] &&
+        flatSlots[i + 2] &&
+        (flatSlots[i + 1].getTime() - windowStart.getTime() === 15 * 60000) &&
+        (flatSlots[i + 2].getTime() - flatSlots[i + 1].getTime() === 15 * 60000)
       ) {
-        exactMatchFound = true;
-        break;
-      }
+        if (
+          windowStart.getTime() === requestedStart.getTime()
+        ) {
+          exactMatchFound = true;
+          break;
+        }
 
-      // If no match yet, look for the next available 45-minute window
-      if (!suggestedSlot && (slotEnd.getTime() - slotStart.getTime()) >= 45 * 60000) {
-        suggestedSlot = {
-          suggested_start: slotStart,
-          suggested_end: new Date(slotStart.getTime() + 45 * 60000)
-        };
+        if (!suggestedSlot) {
+          suggestedSlot = windowStart;
+        }
       }
     }
 
@@ -502,13 +451,13 @@ async function handleCheckAvailability(args) {
       return {
         available: true,
         message: `A 45-minute slot is available at your requested time.`,
-        available_slots: slots,
+        available_slots: flatSlots,
         date_checked: date
       };
     }
 
     if (suggestedSlot) {
-      const localSuggestedTime = suggestedSlot.suggested_start.toLocaleTimeString('en-US', {
+      const localSuggestedTime = suggestedSlot.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
         timeZone: timezone
@@ -518,8 +467,8 @@ async function handleCheckAvailability(args) {
         available: false,
         suggested: true,
         message: `Your requested time is not available, but the next available 45-minute slot is at ${localSuggestedTime}.`,
-        suggested_time: suggestedSlot.suggested_start.toISOString(),
-        available_slots: slots,
+        suggested_time: suggestedSlot.toISOString(),
+        available_slots: flatSlots,
         date_checked: date
       };
     }
@@ -527,19 +476,18 @@ async function handleCheckAvailability(args) {
     return {
       available: false,
       message: `There are no 45-minute slots available at your requested time, and no other options found for that day.`,
-      available_slots: slots,
+      available_slots: flatSlots,
       date_checked: date
     };
 
   } catch (error) {
-    console.error('Availability check error:', error);
+    console.error("Availability check error:", error);
     return {
       available: false,
       error: "I'm having trouble checking availability. Please try again."
     };
   }
 }
-
 
 function convertDateToISO(dateStr) {
   // Simple conversion for common date formats

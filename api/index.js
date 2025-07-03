@@ -967,7 +967,7 @@ async function authenticateGmail() {
     null,
     process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
     ['https://www.googleapis.com/auth/gmail.send'],
-    'your-email@crescentfamilydental.com' // Replace with your actual email
+    'info@rarifiedsolutions.com' // Replace with your actual email
   );
 
   return auth;

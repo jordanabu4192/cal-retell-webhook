@@ -10,8 +10,6 @@ const {
   handleLookupLocalIncentives
 } = require('./lead-qualification');
 
-const gmail = google.gmail({ version: 'v1' });
-
 module.exports = async (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -138,6 +136,11 @@ if (name === 'book_solar_consultation') {
 if (name === 'send_solar_info') {
  const result = await handleSendSolarInfo(args);
  return res.json(result);
+}
+
+if (name === 'send_confirmation_email') {
+  const result = await handleSendConfirmationEmail(args);
+  return res.json(result);
 }
 
       return res.status(400).json({ error: "Unknown function" });
@@ -1000,7 +1003,8 @@ async function handleSendConfirmationEmail(args) {
 
   try {
     const auth = await authenticateGmail();
-    
+    const gmail = google.gmail({ version: 'v1', auth: auth });
+
     // Create email content
     const subject = `${appointment_type.charAt(0).toUpperCase() + appointment_type.slice(1)} Confirmation - ${appointment_date} at ${appointment_time}`;
     

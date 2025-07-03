@@ -555,25 +555,41 @@ if (start) {
 }
 
 try {
-    // Convert date and time to ISO format
-    const appointmentDateTime = convertToISODateTime(appointment_date, appointment_time);
-    console.log('Converted to ISO:', appointmentDateTime);
+  // Handle different date/time formats from Kady
+  let appointmentDateTime;
+  
+  // Check if date is already in ISO format (YYYY-MM-DD)
+  if (appointment_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    // Fix the year if it's wrong (2023 → 2025)
+    let fixedDate = appointment_date;
+    if (appointment_date.startsWith('2023')) {
+      fixedDate = appointment_date.replace('2023', '2025');
+    }
     
-    // Create the booking request
-    const bookingData = {
-      start: appointmentDateTime,
-      eventTypeId: 2694982, // Your Demo Appointment event type ID
-      attendee: {
-        name: name,
-        email: email,
-        timeZone: "America/Denver"
-      },
-      metadata: {
-        phone: phone || '',
-        reason: reason || 'General appointment',
-        notes: notes || ''
+    // Handle 24-hour time format (15:00 → 3 PM)
+    let fixedTime = appointment_time;
+    if (appointment_time.match(/^\d{1,2}:\d{2}$/)) {
+      const [hour, minute] = appointment_time.split(':');
+      const hourNum = parseInt(hour);
+      if (hourNum === 0) {
+        fixedTime = `12:${minute} AM`;
+      } else if (hourNum < 12) {
+        fixedTime = `${hourNum}:${minute} AM`;
+      } else if (hourNum === 12) {
+        fixedTime = `12:${minute} PM`;
+      } else {
+        fixedTime = `${hourNum - 12}:${minute} PM`;
       }
-    };
+    }
+    
+    appointmentDateTime = convertToISODateTime(fixedDate, fixedTime);
+  } else {
+    // Use the existing conversion for human-friendly format
+    appointmentDateTime = convertToISODateTime(appointment_date, appointment_time);
+  }
+  
+  console.log('Original date/time:', appointment_date, appointment_time);
+  console.log('Converted to ISO:', appointmentDateTime);
     
     const response = await fetch('https://api.cal.com/v2/bookings', {
       method: 'POST',

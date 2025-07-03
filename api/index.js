@@ -565,26 +565,36 @@ function getBusinessHoursAvailability(date, requestedStart, requestedEnd) {
 }
 async function handleBookAppointment(args) {
   const { 
-    name, 
-    email, 
-    phone, 
-    appointment_date, 
-    appointment_time, 
-    reason,
-    notes 
-  } = args;
-  
-  console.log('Booking appointment for:', name, email, appointment_date, appointment_time);
-  
-  // Validate required fields
-  if (!name || !email || !appointment_date || !appointment_time) {
-    return {
-      success: false,
-      error: "I need the patient's name, email, appointment date, and time to book the appointment."
-    };
-  }
-  
-  try {
+  name, 
+  email, 
+  phone, 
+  appointment_date, 
+  appointment_time, 
+  reason,
+  notes,
+  start // Optional: direct ISO datetime, e.g. suggested_time
+} = args;
+
+console.log('[book_appointment] Booking appointment for:', name, email);
+
+// Validate required fields
+if (!name || !email || (!start && (!appointment_date || !appointment_time))) {
+  return {
+    success: false,
+    error: "I need the patient's name, email, and either an ISO start time or both appointment date and time."
+  };
+}
+
+let appointmentDateTime;
+if (start) {
+  appointmentDateTime = start;
+  console.log('[book_appointment] Using ISO start:', appointmentDateTime);
+} else {
+  appointmentDateTime = convertToISODateTime(appointment_date, appointment_time);
+  console.log('[book_appointment] Converted to ISO:', appointmentDateTime);
+}
+
+try {
     // Convert date and time to ISO format
     const appointmentDateTime = convertToISODateTime(appointment_date, appointment_time);
     console.log('Converted to ISO:', appointmentDateTime);

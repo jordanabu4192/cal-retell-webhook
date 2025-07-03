@@ -176,12 +176,21 @@ async function handleRescheduleBooking(args) {
   
   console.log('Rescheduling booking:', booking_uid, 'to:', new_start_time);
   
+  // Validate required fields
   if (!booking_uid) {
-    return "I need your booking ID to reschedule. Can you provide that?";
+    return {
+      success: false,
+      error: "Booking ID is required",
+      message: "I need your booking ID to reschedule. Can you provide that?"
+    };
   }
   
   if (!new_start_time) {
-    return "I need to know what time you'd like to reschedule to. When works better for you?";
+    return {
+      success: false,
+      error: "New appointment time is required", 
+      message: "I need to know what time you'd like to reschedule to. When works better for you?"
+    };
   }
   
   try {
@@ -208,12 +217,25 @@ async function handleRescheduleBooking(args) {
       console.error('Cal.com error details:', errorData);
       
       if (response.status === 404) {
-        return "I couldn't find a booking with that ID. Can you double-check your booking number?";
+        return {
+          success: false,
+          error: "Booking not found",
+          message: "I couldn't find a booking with that ID. Can you double-check your booking number?"
+        };
       }
       if (response.status === 400) {
-        return "That time slot might not be available. Can you suggest another time?";
+        return {
+          success: false,
+          error: "Time slot unavailable",
+          message: "That time slot might not be available. Can you suggest another time?"
+        };
       }
-      throw new Error(`Cal.com API error: ${response.status}`);
+      
+      return {
+        success: false,
+        error: `Cal.com API error: ${response.status}`,
+        message: "I'm having trouble with the booking system. Please try again in a moment."
+      };
     }
     
     const result = await response.json();
@@ -230,17 +252,42 @@ async function handleRescheduleBooking(args) {
         timeZone: 'America/Denver'
       });
       
-      return `Perfect! I've successfully rescheduled your booking to ${newDateTime}. Your booking ID is ${booking.uid}.`;
+      return {
+        success: true,
+        message: `Perfect! I've successfully rescheduled your booking to ${newDateTime}. Your booking ID is ${booking.uid}.`,
+        booking_details: {
+          booking_id: booking.uid,
+          new_datetime: newDateTime,
+          original_request: new_start_time
+        }
+      };
     } else {
-      return "I encountered an issue while rescheduling your booking. Please try again.";
+      return {
+        success: false,
+        error: "Rescheduling failed",
+        message: "I encountered an issue while rescheduling your booking. Please try again."
+      };
     }
     
   } catch (error) {
     console.error('Reschedule error:', error);
-    return "I'm sorry, I couldn't understand that date and time format. Could you try something like 'July 9th at 2 PM'?";
+    
+    // Check if it's a chrono parsing error
+    if (error.message.includes('Could not parse date/time')) {
+      return {
+        success: false,
+        error: "Invalid date/time format",
+        message: "I'm sorry, I couldn't understand that date and time format. Could you try something like 'July 9th at 2 PM'?"
+      };
+    }
+    
+    return {
+      success: false,
+      error: error.message,
+      message: "I'm sorry, I'm having trouble connecting to the booking system right now. Please try again in a few minutes."
+    };
   }
 }
-
 // ---- UPDATED: Find Booking with Chrono ----
 async function handleFindBookingByDate(args) {
   const { email, appointment_date, appointment_time } = args;

@@ -382,6 +382,7 @@ const isPM = searchTime.includes('pm');
 async function handleCheckAvailability(args) {
   const { date, start_time, timezone = "America/Denver" } = args;
 
+console.log('[check_availability] Using CAL_API_KEY:', process.env.CAL_API_KEY ? '✔️ Present' : '❌ Missing');
 console.log('[check_availability] Fetching slots from:', url);
 console.log('[check_availability] Using API key:', process.env.CAL_API_KEY ? '✔️ Present' : '❌ Missing');
 
@@ -393,13 +394,14 @@ console.log('[check_availability] Using API key:', process.env.CAL_API_KEY ? '�
 
     const url = `https://api.cal.com/v2/slots?eventTypeId=${eventTypeId}&start=${startDate}&end=${endDate}&timeZone=${timezone}`;
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${process.env.CAL_API_KEY}`,
-        'cal-api-version': '2024-08-13'
-      }
-    });
+const calApiUrl = `https://api.cal.com/v2/slots?eventTypeId=2694982&start=${startDate}&end=${startDate}&timeZone=${timezone}`;
+const response = await fetch(calApiUrl, {
+  method: 'GET',
+  headers: {
+    Authorization: `Bearer ${process.env.CAL_API_KEY}`,
+    'cal-api-version': '2024-08-13'
+  }
+});
 
     if (!response.ok) {
       console.error('Cal.com slots error:', response.status);

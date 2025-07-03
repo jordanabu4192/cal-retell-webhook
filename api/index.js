@@ -965,9 +965,9 @@ async function authenticateGmail() {
   const auth = new google.auth.JWT(
     process.env.GOOGLE_CLIENT_EMAIL,
     null,
-    process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    null, // No private key needed
     ['https://www.googleapis.com/auth/gmail.send'],
-    'info@rarifiedsolutions.com' // Replace with your actual email
+    process.env.GMAIL_FROM_ADDRESS // The email to impersonate
   );
 
   return auth;

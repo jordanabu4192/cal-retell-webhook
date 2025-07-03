@@ -928,3 +928,27 @@ async function handleTestCreateCall(args) {
     return { success: false, error: error.message };
   }
 }
+
+function parseToUTC(dateTimeString, timezone = 'America/Denver') {
+  console.log(`[parseToUTC] Parsing: "${dateTimeString}" in timezone: ${timezone}`);
+  
+  // Parse with chrono first
+  const parsed = chrono.parseDate(dateTimeString, new Date());
+  
+  if (!parsed) {
+    console.error(`[parseToUTC] Could not parse: ${dateTimeString}`);
+    throw new Error(`Could not parse date/time: ${dateTimeString}`);
+  }
+  
+  console.log(`[parseToUTC] Chrono parsed as: ${parsed.toISOString()}`);
+  
+  // Treat the parsed time as Mountain Time and convert to UTC
+  // Mountain Time is UTC-6 in summer (MDT), UTC-7 in winter (MST)
+  // For July, we're in MDT (UTC-6)
+  const mountainOffset = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
+  const utcTime = new Date(parsed.getTime() + mountainOffset);
+  
+  const utcString = utcTime.toISOString();
+  console.log(`[parseToUTC] Final UTC result: ${utcString}`);
+  return utcString;
+}

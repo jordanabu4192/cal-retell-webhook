@@ -4,10 +4,11 @@
   "main": "api/index.js",
   "scripts": {
     "start": "node api/index.js"
-  },
+  {
   "dependencies": {
     "express": "^5.1.0",
     "retell-sdk": "^4.38.0",
-    "chrono-node": "^2.7.6"
+    "chrono-node": "^2.7.6",
+    "googleapis": "^131.0.0"
   }
 }

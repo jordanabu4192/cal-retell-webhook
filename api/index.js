@@ -34,6 +34,14 @@ if (!req.body.name && req.body.monthly_electric_bill !== undefined) {
   return res.json(result);
 }
 
+if (!process.env.RETELL_API_KEY) {
+  throw new Error('[startup] Missing RETELL_API_KEY environment variable.');
+}
+
+if (!process.env.CAL_API_KEY) {
+  throw new Error('[startup] Missing CAL_API_KEY environment variable. Please add it to your Vercel project.');
+}
+
 if (!req.body.name && req.body.homeowner !== undefined) {
   // This is a score_solar_lead call  
   const result = await handleScoreSolarLead(req.body);
@@ -132,6 +140,25 @@ if (name === 'send_solar_info') {
   
   return res.status(405).json({ error: "Method not allowed" });
 };
+
+// ---- Timezone Utility ----
+function convertMountainToUTC(localDateString) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Denver',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).formatToParts(new Date(localDateString));
+
+  const dateParts = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+
+  const iso = `${dateParts.year}-${dateParts.month}-${dateParts.day}T${dateParts.hour}:${dateParts.minute}:00`;
+
+  return new Date(iso + 'Z');
+}
 
 async function handleRescheduleBooking(args) {
   const { booking_uid, new_start_time, rescheduled_by, reason } = args;
@@ -392,7 +419,7 @@ async function handleCheckAvailability(args) {
     // Convert requested start time to UTC
     const [reqHour, reqMinute] = start_time.split(':').map(n => parseInt(n));
     const requestedStart = new Date(`${date}T${reqHour.toString().padStart(2, '0')}:${reqMinute.toString().padStart(2, '0')}:00`);
-    requestedStart.setHours(requestedStart.getHours() + 6); // MDT to UTC
+    const utcStart = convertMountainToUTC(`${date}T${start_time}`);
     const requestedEnd = new Date(requestedStart.getTime() + 45 * 60000);
 
     let exactMatchFound = false;

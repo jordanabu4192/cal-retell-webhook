@@ -379,22 +379,31 @@ const isPM = searchTime.includes('pm');
   console.log('No exact match found, returning first active booking');
   return bookings.length > 0 ? bookings[0] : null;
 }
+
 async function handleCheckAvailability(args) {
   const { date, start_time, end_time, timezone = "America/Denver" } = args;
   
   console.log('Checking availability for:', date, start_time, timezone);
   
   try {
-    // Convert date to proper ISO format
+    // First check business hours
+    const businessHours = getBusinessHoursAvailability(date, start_time, end_time);
+    
+    if (!businessHours.available) {
+      return {
+        available: false,
+        availability_details: businessHours,
+        date_checked: date
+      };
+    }
+    
+    // If within business hours, check for existing bookings
     const isoDate = convertDateToISO(date);
-    const startDateTime = `${isoDate}T00:00:00Z`;
-    const endDateTime = `${isoDate}T23:59:59Z`;
+    const startOfDay = `${isoDate}T00:00:00Z`;
+    const endOfDay = `${isoDate}T23:59:59Z`;
     
-    const url = `https://api.cal.com/v2/slots?eventTypeId=2694982&startTime=${startDateTime}&endTime=${endDateTime}`;
-    
-    console.log('Calling Cal.com API:', url);
-    
-    const response = await fetch(url, {
+    // Get existing bookings for that day
+    const response = await fetch(`https://api.cal.com/v2/bookings?start=${startOfDay}&end=${endOfDay}`, {
       method: 'GET',
       headers: {
         'cal-api-version': '2024-08-13',
@@ -402,62 +411,45 @@ async function handleCheckAvailability(args) {
       }
     });
     
-    if (!response.ok) {
-      console.error('Cal.com slots error:', response.status);
-      const errorText = await response.text().catch(() => 'Unknown error');
-      console.error('Error details:', errorText);
-      
-      // Fallback to business hours logic
-      const businessHours = getBusinessHoursAvailability(date, start_time, end_time);
-      return {
-        available: businessHours.available,
-        availability_details: businessHours,
-        date_checked: date,
-        note: "Using business hours (Cal.com API unavailable)"
-      };
+    let bookingConflicts = 0;
+    if (response.ok) {
+      const bookingsData = await response.json();
+      const dayBookings = bookingsData.data || [];
+      bookingConflicts = dayBookings.filter(booking => booking.status === 'accepted').length;
+      console.log(`Found ${bookingConflicts} existing bookings on ${date}`);
     }
     
-    const slotData = await response.json();
-    console.log('Slots response:', slotData);
+    // Provide helpful availability info
+    const availabilityInfo = {
+      ...businessHours,
+      existing_bookings: bookingConflicts,
+      message: bookingConflicts > 0 
+        ? `${businessHours.message}. We have ${bookingConflicts} appointment(s) already booked for this day.`
+        : `${businessHours.message}. This day looks wide open!`
+    };
     
-    // Check if we have available slots
-    const hasSlots = slotData.slots && Object.keys(slotData.slots).length > 0;
-    
-    if (hasSlots) {
-      return {
-        available: true,
-        availability_details: {
-          message: "Time slots are available on this date",
-          business_hours: "9:00 AM to 5:00 PM",
-          slots_found: true
-        },
-        date_checked: date
-      };
-    } else {
-      return {
-        available: false,
-        availability_details: {
-          message: "No available time slots on this date",
-          business_hours: "9:00 AM to 5:00 PM", 
-          slots_found: false
-        },
-        date_checked: date
-      };
-    }
+    return {
+      available: true,
+      availability_details: availabilityInfo,
+      date_checked: date
+    };
     
   } catch (error) {
     console.error('Check availability error:', error);
     
-    // Fallback to business hours
+    // Fallback to business hours only
     const businessHours = getBusinessHoursAvailability(date, start_time, end_time);
     return {
       available: businessHours.available,
-      availability_details: businessHours,
-      date_checked: date,
-      note: "Using business hours (API error)"
+      availability_details: {
+        ...businessHours,
+        note: "Business hours only (couldn't check existing bookings)"
+      },
+      date_checked: date
     };
   }
 }
+
 function convertDateToISO(dateStr) {
   // Simple conversion for common date formats
   const today = new Date();

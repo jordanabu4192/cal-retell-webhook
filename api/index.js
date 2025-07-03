@@ -827,7 +827,14 @@ async function handleTriggerReminders(args) {
     minute: '2-digit',
     timeZone: 'America/Denver'
   }),
-  booking_uid: appointment.uid
+  booking_uid: appointment.uid,
+  current_date: new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric', 
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'America/Denver'
+  })
 }
         })
       });

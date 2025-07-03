@@ -1,3 +1,5 @@
+const chrono = require('chrono-node'); // Add this import at the top
+
 const {
   handleCalculateSolarSavings,
   handleScoreSolarLead,
@@ -141,25 +143,34 @@ if (name === 'send_solar_info') {
   return res.status(405).json({ error: "Method not allowed" });
 };
 
-// ---- Timezone Utility ----
-function convertMountainToUTC(localDateString) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Denver',
-    hour12: false,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).formatToParts(new Date(localDateString));
-
-  const dateParts = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-
-  const iso = `${dateParts.year}-${dateParts.month}-${dateParts.day}T${dateParts.hour}:${dateParts.minute}:00`;
-
-  return new Date(iso + 'Z');
+// ---- NEW: Improved Timezone Utility with Chrono ----
+function parseToUTC(dateTimeString, timezone = 'America/Denver') {
+  console.log(`[parseToUTC] Parsing: "${dateTimeString}" in timezone: ${timezone}`);
+  
+  // Chrono can handle natural language and standard formats
+  const parsed = chrono.parseDate(dateTimeString, new Date(), { timezone });
+  
+  if (!parsed) {
+    console.error(`[parseToUTC] Could not parse: ${dateTimeString}`);
+    throw new Error(`Could not parse date/time: ${dateTimeString}`);
+  }
+  
+  const utcString = parsed.toISOString();
+  console.log(`[parseToUTC] Result: ${utcString}`);
+  return utcString;
 }
 
+function parseToMountainTime(dateTimeString) {
+  const parsed = chrono.parseDate(dateTimeString, new Date(), { timezone: 'America/Denver' });
+  
+  if (!parsed) {
+    throw new Error(`Could not parse date/time: ${dateTimeString}`);
+  }
+  
+  return parsed;
+}
+
+// ---- UPDATED: Reschedule with Chrono ----
 async function handleRescheduleBooking(args) {
   const { booking_uid, new_start_time, rescheduled_by, reason } = args;
   
@@ -173,9 +184,10 @@ async function handleRescheduleBooking(args) {
     return "I need to know what time you'd like to reschedule to. When works better for you?";
   }
   
-  const utcTime = new_start_time;
-  
   try {
+    // Use chrono to parse the new time
+    const utcTime = parseToUTC(new_start_time);
+    
     const response = await fetch(`https://api.cal.com/v2/bookings/${booking_uid}/reschedule`, {
       method: 'POST',
       headers: {
@@ -208,7 +220,6 @@ async function handleRescheduleBooking(args) {
     
     if (result.status === 'success') {
       const booking = result.data;
-      // Convert back to Mountain Time for user-friendly response
       const newDateTime = new Date(booking.start).toLocaleString('en-US', {
         weekday: 'long',
         year: 'numeric',
@@ -226,10 +237,11 @@ async function handleRescheduleBooking(args) {
     
   } catch (error) {
     console.error('Reschedule error:', error);
-    return "I'm sorry, I'm having trouble connecting to the booking system right now. Please try again in a few minutes.";
+    return "I'm sorry, I couldn't understand that date and time format. Could you try something like 'July 9th at 2 PM'?";
   }
 }
 
+// ---- UPDATED: Find Booking with Chrono ----
 async function handleFindBookingByDate(args) {
   const { email, appointment_date, appointment_time } = args;
   
@@ -262,7 +274,7 @@ async function handleFindBookingByDate(args) {
     
     console.log('Active future bookings:', activeBookings.length);
     
-    // Try to match the date and time
+    // Try to match the date and time using chrono
     const matchedBooking = findBestMatch(activeBookings, appointment_date, appointment_time);
     
     if (matchedBooking) {
@@ -294,94 +306,79 @@ async function handleFindBookingByDate(args) {
   }
 }
 
+// ---- UPDATED: Best Match with Chrono ----
 function findBestMatch(bookings, dateStr, timeStr) {
   console.log('Searching for:', dateStr, timeStr);
   
-  // Convert search terms to lowercase and extract key parts
-  const searchDate = dateStr.toLowerCase().replace(/[^\w\s]/g, '');
-  const searchTime = timeStr.toLowerCase().replace(/[^\w\s]/g, '');
-  
-  // Extract month and day from search
-  const monthMap = {
-    'january': 0, 'jan': 0, 'february': 1, 'feb': 1, 'march': 2, 'mar': 2,
-    'april': 3, 'apr': 3, 'may': 4, 'june': 5, 'jun': 5,
-    'july': 6, 'jul': 6, 'august': 7, 'aug': 7, 'september': 8, 'sep': 8,
-    'october': 9, 'oct': 9, 'november': 10, 'nov': 10, 'december': 11, 'dec': 11
-  };
-  
-  // Extract day number from search string
-  const dayMatch = searchDate.match(/(\d+)/);
-  const searchDay = dayMatch ? parseInt(dayMatch[1]) : null;
-  
-  // Extract month from search string
-  let searchMonth = null;
-  for (const [monthName, monthNum] of Object.entries(monthMap)) {
-    if (searchDate.includes(monthName)) {
-      searchMonth = monthNum;
-      break;
+  try {
+    // Use chrono to parse the search terms
+    const searchDateTime = chrono.parseDate(`${dateStr} ${timeStr}`, new Date(), { timezone: 'America/Denver' });
+    
+    if (!searchDateTime) {
+      console.log('Could not parse search date/time with chrono');
+      return bookings.length > 0 ? bookings[0] : null;
     }
-  }
-  
-// Extract hour from time string (improved)
-let searchHour = null;
-const timePattern = /^(\d+)/; // Match only the first number
-const timeMatch = searchTime.match(timePattern);
-if (timeMatch) {
-  searchHour = parseInt(timeMatch[1]);
-}
-const isPM = searchTime.includes('pm');
-  
-  console.log('Parsed search:', { searchDay, searchMonth, searchHour, isPM });
-  
-  for (const booking of bookings) {
-    const bookingDate = new Date(booking.start);
-    const bookingDay = bookingDate.getDate();
-    const bookingMonth = bookingDate.getMonth();
-    const bookingHour = bookingDate.getHours();
     
-    console.log('Checking booking:', {
-      bookingDay,
-      bookingMonth, 
-      bookingHour,
-      uid: booking.uid,
-      start: booking.start
-    });
+    console.log('Parsed search datetime:', searchDateTime);
     
-    // Check if day and month match
-    const dayMatch = searchDay === bookingDay;
-    const monthMatch = searchMonth === bookingMonth;
+    // Find the booking that's closest to the search time
+    let bestMatch = null;
+    let smallestDiff = Infinity;
     
-    // Check if hour matches (convert PM if needed)
-    let hourMatch = false;
-    if (searchHour !== null) {
-      let expectedHour = searchHour;
-      if (isPM && searchHour !== 12) expectedHour += 12;
-      if (!isPM && searchHour === 12) expectedHour = 0;
+    for (const booking of bookings) {
+      const bookingDate = new Date(booking.start);
+      const timeDiff = Math.abs(bookingDate.getTime() - searchDateTime.getTime());
       
-      // Allow for timezone differences (Mountain Time is UTC-6 or UTC-7)
-      hourMatch = Math.abs(bookingHour - expectedHour) <= 8; // Flexible for timezone
+      console.log('Checking booking:', {
+        uid: booking.uid,
+        start: booking.start,
+        timeDiff: timeDiff / (1000 * 60) // minutes
+      });
+      
+      // If within 2 hours (accounting for timezone differences)
+      if (timeDiff < 2 * 60 * 60 * 1000 && timeDiff < smallestDiff) {
+        bestMatch = booking;
+        smallestDiff = timeDiff;
+      }
     }
     
-    console.log('Match results:', { dayMatch, monthMatch, hourMatch });
-    
-    if (dayMatch && monthMatch && hourMatch) {
-      console.log('Found exact match:', booking.uid);
-      return booking;
+    if (bestMatch) {
+      console.log('Found best match:', bestMatch.uid, 'with diff:', smallestDiff / (1000 * 60), 'minutes');
+      return bestMatch;
     }
+    
+    console.log('No close match found, returning first active booking');
+    return bookings.length > 0 ? bookings[0] : null;
+    
+  } catch (error) {
+    console.error('Error in findBestMatch:', error);
+    return bookings.length > 0 ? bookings[0] : null;
   }
-  
-  console.log('No exact match found, returning first active booking');
-  return bookings.length > 0 ? bookings[0] : null;
 }
 
+// ---- UPDATED: Check Availability with Chrono ----
 async function handleCheckAvailability(args) {
   const { date, start_time, end_time, timezone = "America/Denver" } = args;
   
   console.log('Checking availability for:', date, start_time, timezone);
   
   try {
-    // First check business hours
-    const businessHours = getBusinessHoursAvailability(date, start_time, end_time);
+    // Parse the date with chrono
+    const dateObj = chrono.parseDate(date, new Date(), { timezone });
+    
+    if (!dateObj) {
+      return {
+        available: false,
+        availability_details: {
+          available: false,
+          message: "I couldn't understand that date. Please try something like 'July 8th' or 'tomorrow'."
+        },
+        date_checked: date
+      };
+    }
+    
+    // Check business hours
+    const businessHours = getBusinessHoursAvailability(dateObj, start_time, end_time);
     
     if (!businessHours.available) {
       return {
@@ -391,13 +388,13 @@ async function handleCheckAvailability(args) {
       };
     }
     
-    // If within business hours, check for existing bookings
-    const isoDate = convertDateToISO(date);
-    const startOfDay = `${isoDate}T00:00:00Z`;
-    const endOfDay = `${isoDate}T23:59:59Z`;
+    // Check for existing bookings
+    const startOfDay = new Date(dateObj);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(dateObj);
+    endOfDay.setHours(23, 59, 59, 999);
     
-    // Get existing bookings for that day
-    const response = await fetch(`https://api.cal.com/v2/bookings?start=${startOfDay}&end=${endOfDay}`, {
+    const response = await fetch(`https://api.cal.com/v2/bookings?start=${startOfDay.toISOString()}&end=${endOfDay.toISOString()}`, {
       method: 'GET',
       headers: {
         'cal-api-version': '2024-08-13',
@@ -413,7 +410,6 @@ async function handleCheckAvailability(args) {
       console.log(`Found ${bookingConflicts} existing bookings on ${date}`);
     }
     
-    // Provide helpful availability info
     const availabilityInfo = {
       ...businessHours,
       existing_bookings: bookingConflicts,
@@ -431,69 +427,22 @@ async function handleCheckAvailability(args) {
   } catch (error) {
     console.error('Check availability error:', error);
     
-    // Fallback to business hours only
-    const businessHours = getBusinessHoursAvailability(date, start_time, end_time);
     return {
-      available: businessHours.available,
+      available: false,
       availability_details: {
-        ...businessHours,
-        note: "Business hours only (couldn't check existing bookings)"
+        available: false,
+        message: "I'm having trouble checking that date. Please try again."
       },
       date_checked: date
     };
   }
 }
 
-function convertDateToISO(dateStr) {
-  // Simple conversion for common date formats
-  const today = new Date();
-  const year = today.getFullYear();
-  
-  // Extract month and day from strings like "July 5th"
-  const months = {
-    'january': '01', 'february': '02', 'march': '03', 'april': '04',
-    'may': '05', 'june': '06', 'july': '07', 'august': '08',
-    'september': '09', 'october': '10', 'november': '11', 'december': '12'
-  };
-  
-  const dateStr_lower = dateStr.toLowerCase();
-  let month = '';
-  let day = '';
-  
-  // Find month
-  for (const [monthName, monthNum] of Object.entries(months)) {
-    if (dateStr_lower.includes(monthName)) {
-      month = monthNum;
-      break;
-    }
-  }
-  
-  // Find day
-  const dayMatch = dateStr_lower.match(/(\d+)/);
-  if (dayMatch) {
-    day = dayMatch[1].padStart(2, '0');
-  }
-  
-  return `${year}-${month}-${day}`;
-}
-
-function getBusinessHoursAvailability(date, requestedStart, requestedEnd) {
-  // Your business hours: 9 AM - 5 PM Monday-Friday, 9 AM - 4 PM Saturday
-  
-  // Convert the date string to a proper Date object
-  let dateObj;
-  if (date.includes('-')) {
-    // Already in ISO format like "2025-07-05"
-    dateObj = new Date(date);
-  } else {
-    // Convert "July 5th" to a date
-    const isoDate = convertDateToISO(date);
-    dateObj = new Date(isoDate);
-  }
-  
+// ---- UPDATED: Business Hours with Date Object ----
+function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {
   const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday
   
-  console.log('Date:', date, 'Day of week:', dayOfWeek);
+  console.log('Date:', dateObj.toDateString(), 'Day of week:', dayOfWeek);
   
   if (dayOfWeek === 0) { // Sunday
     return {
@@ -514,91 +463,62 @@ function getBusinessHoursAvailability(date, requestedStart, requestedEnd) {
     available: true,
     message: `Available during business hours: ${hours}`,
     business_hours: hours,
-    date: date
+    date: dateObj.toDateString()
   };
 }
+
+// ---- UPDATED: Book Appointment with Chrono ----
 async function handleBookAppointment(args) {
   const { 
-  name, 
-  email, 
-  phone, 
-  appointment_date, 
-  appointment_time, 
-  reason,
-  notes,
-  start // Optional: direct ISO datetime, e.g. suggested_time
-} = args;
+    name, 
+    email, 
+    phone, 
+    appointment_date, 
+    appointment_time, 
+    reason,
+    notes,
+    start 
+  } = args;
 
-console.log('[book_appointment] Booking appointment for:', name, email);
+  console.log('[book_appointment] Booking appointment for:', name, email);
 
-// Validate required fields
-if (!name || !email || (!start && (!appointment_date || !appointment_time))) {
-  return {
-    success: false,
-    error: "I need the patient's name, email, and either an ISO start time or both appointment date and time."
-  };
-}
+  // Validate required fields
+  if (!name || !email || (!start && (!appointment_date || !appointment_time))) {
+    return {
+      success: false,
+      error: "I need the patient's name, email, and either an ISO start time or both appointment date and time."
+    };
+  }
 
-let appointmentDateTime;
-if (start) {
-  appointmentDateTime = start;
-  console.log('[book_appointment] Using ISO start:', appointmentDateTime);
-} else {
-  appointmentDateTime = convertToISODateTime(appointment_date, appointment_time);
-  console.log('[book_appointment] Converted to ISO:', appointmentDateTime);
-}
-
-try {
-  // Handle different date/time formats from Kady
   let appointmentDateTime;
   
-  // Check if date is already in ISO format (YYYY-MM-DD)
-  if (appointment_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    // Fix the year if it's wrong (2023 → 2025)
-    let fixedDate = appointment_date;
-    if (appointment_date.startsWith('2023')) {
-      fixedDate = appointment_date.replace('2023', '2025');
+  try {
+    if (start) {
+      // Direct ISO datetime provided
+      appointmentDateTime = start;
+      console.log('[book_appointment] Using ISO start:', appointmentDateTime);
+    } else {
+      // Combine date and time strings and let chrono parse it
+      const combinedDateTime = `${appointment_date} ${appointment_time}`;
+      appointmentDateTime = parseToUTC(combinedDateTime);
+      console.log('[book_appointment] Parsed with chrono:', combinedDateTime, '→', appointmentDateTime);
     }
-    
-    // Handle 24-hour time format (15:00 → 3 PM)
-    let fixedTime = appointment_time;
-    if (appointment_time.match(/^\d{1,2}:\d{2}$/)) {
-      const [hour, minute] = appointment_time.split(':');
-      const hourNum = parseInt(hour);
-      if (hourNum === 0) {
-        fixedTime = `12:${minute} AM`;
-      } else if (hourNum < 12) {
-        fixedTime = `${hourNum}:${minute} AM`;
-      } else if (hourNum === 12) {
-        fixedTime = `12:${minute} PM`;
-      } else {
-        fixedTime = `${hourNum - 12}:${minute} PM`;
-      }
-    }
-    
-    appointmentDateTime = convertToISODateTime(fixedDate, fixedTime);
-  } else {
-    // Use the existing conversion for human-friendly format
-    appointmentDateTime = convertToISODateTime(appointment_date, appointment_time);
-  }
-  
-  console.log('Original date/time:', appointment_date, appointment_time);
-  console.log('Converted to ISO:', appointmentDateTime);
 
-  const bookingData = {
-  start: appointmentDateTime,
-  eventTypeId: 2694982,
-  attendee: {
-    name: name,
-    email: email,
-    timeZone: "America/Denver"
-  },
-  metadata: {
-    phone: phone || '',
-    reason: reason || 'General appointment',
-    notes: notes || ''
-  }
-};
+    const bookingData = {
+      start: appointmentDateTime,
+      eventTypeId: 2694982,
+      attendee: {
+        name: name,
+        email: email,
+        timeZone: "America/Denver"
+      },
+      metadata: {
+        phone: phone || '',
+        reason: reason || 'General appointment',
+        notes: notes || ''
+      }
+    };
+
     const response = await fetch('https://api.cal.com/v2/bookings', {
       method: 'POST',
       headers: {
@@ -665,55 +585,12 @@ try {
     console.error('Book appointment error:', error);
     return {
       success: false,
-      error: "I'm having trouble accessing our booking system right now. Please try again in a few minutes or call our office directly."
+      error: "I'm having trouble parsing that date and time. Could you try a different format like 'July 8th at 3 PM'?"
     };
   }
 }
 
-function convertToISODateTime(dateStr, timeStr) {
-  try {
-    console.log(`Converting Mountain Time to UTC: ${dateStr} ${timeStr}`);
-    
-    // Handle both "July 8th" and "2025-07-07" formats
-    let isoDate;
-    if (dateStr.includes('-')) {
-      // Already in YYYY-MM-DD format
-      isoDate = dateStr;
-    } else {
-      // Use existing convertDateToISO function for natural language dates
-      isoDate = convertDateToISO(dateStr);
-    }
-    
-    console.log(`ISO Date: ${isoDate}`);
-    
-    // Parse the time
-    const timeMatch = timeStr.toLowerCase().match(/(\d+)(?::(\d+))?\s*(am|pm)?/);
-    if (!timeMatch) {
-      throw new Error('Invalid time format');
-    }
-    
-    let hour = parseInt(timeMatch[1]);
-    const minute = parseInt(timeMatch[2]) || 0;
-    const isPM = timeStr.toLowerCase().includes('pm');
-    
-    // Convert to 24-hour format
-    if (isPM && hour !== 12) {
-      hour += 12;
-    } else if (!isPM && hour === 12) {
-      hour = 0;
-    }
-    
-    // Convert Mountain Time to UTC (add 6 hours for MDT)
-    const utcHour = (hour + 6) % 24;
-    const utcDate = new Date(`${isoDate}T${utcHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00Z`);
-    
-    console.log(`Final UTC DateTime: ${utcDate.toISOString()}`);
-    return utcDate.toISOString();
-  } catch (error) {
-    console.error('Date conversion error:', error, 'Inputs:', dateStr, timeStr);
-    throw error;
-  }
-}
+// ---- UNCHANGED: Cancel Booking ----
 async function handleCancelBooking(args) {
   try {
     console.log('Cancelling booking:', args);
@@ -754,6 +631,8 @@ async function handleCancelBooking(args) {
     return { success: false, error: "I'm having trouble cancelling your appointment right now." };
   }
 }
+
+// ---- UNCHANGED: Get Tomorrow Appointments ----
 async function handleGetTomorrowAppointments(args) {
   try {
     const now = new Date();
@@ -790,6 +669,8 @@ async function handleGetTomorrowAppointments(args) {
     return { success: false, error: "Could not fetch appointments" };
   }
 }
+
+// ---- UNCHANGED: Trigger Reminders ----
 async function handleTriggerReminders(args) {
   try {
     // Get tomorrow's appointments
@@ -865,6 +746,7 @@ async function handleTriggerReminders(args) {
   }
 }
 
+// ---- UNCHANGED: Test Create Call ----
 async function handleTestCreateCall(args) {
   try {
     const { phone_number, agent_id } = args;

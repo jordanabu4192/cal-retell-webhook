@@ -206,7 +206,10 @@ async function handleRescheduleBooking(args) {
     });
     
     if (!response.ok) {
-      console.error('Cal.com API error:', response.status);
+      if (!response.ok) {
+  const errorData = await response.json().catch(() => ({}));
+  console.error('Cal.com API error:', response.status);
+  console.error('Cal.com error details:', errorData);
       throw new Error(`Cal.com API error: ${response.status}`);
     }
     

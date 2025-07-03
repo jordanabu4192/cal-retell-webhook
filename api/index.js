@@ -198,18 +198,24 @@ async function handleRescheduleBooking(args) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.CAL_API_KEY}`
       },
-   body: JSON.stringify({
+      body: JSON.stringify({
         start: utcTime,
-        rescheduled_by: rescheduled_by || "user",
-        reason: reason || "Rescheduled by request"
+        rescheduledBy: rescheduled_by || "user",
+        reschedulingReason: reason || "Rescheduled by request"
       })
     });
     
     if (!response.ok) {
-      if (!response.ok) {
-  const errorData = await response.json().catch(() => ({}));
-  console.error('Cal.com API error:', response.status);
-  console.error('Cal.com error details:', errorData);
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Cal.com API error:', response.status);
+      console.error('Cal.com error details:', errorData);
+      
+      if (response.status === 404) {
+        return "I couldn't find a booking with that ID. Can you double-check your booking number?";
+      }
+      if (response.status === 400) {
+        return "That time slot might not be available. Can you suggest another time?";
+      }
       throw new Error(`Cal.com API error: ${response.status}`);
     }
     

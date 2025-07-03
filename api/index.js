@@ -294,9 +294,26 @@ async function handleFindBookingByDate(args) {
   
   console.log('Finding booking for:', email, appointment_date, appointment_time);
   
+  // Validate required fields
+  if (!email) {
+    return {
+      success: false,
+      error: "Email is required",
+      message: "I need your email address to find your appointment."
+    };
+  }
+  
+  if (!appointment_date || !appointment_time) {
+    return {
+      success: false,
+      error: "Date and time are required",
+      message: "I need both the date and time of your appointment to find it."
+    };
+  }
+  
   try {
     // First, get all bookings for this email
-    const response = await fetch(`https://api.cal.com/v2/bookings?email=${email}`, {
+    const response = await fetch(`https://api.cal.com/v2/bookings?email=${encodeURIComponent(email)}`, {
       method: 'GET',
       headers: {
         'cal-api-version': '2024-08-13',
@@ -306,7 +323,11 @@ async function handleFindBookingByDate(args) {
     
     if (!response.ok) {
       console.error('Cal.com API error:', response.status);
-      throw new Error(`Cal.com API error: ${response.status}`);
+      return {
+        success: false,
+        error: `Cal.com API error: ${response.status}`,
+        message: "I'm having trouble accessing the booking system. Please try again in a moment."
+      };
     }
     
     const result = await response.json();
@@ -321,6 +342,14 @@ async function handleFindBookingByDate(args) {
     
     console.log('Active future bookings:', activeBookings.length);
     
+    if (activeBookings.length === 0) {
+      return {
+        success: false,
+        error: "No active bookings found",
+        message: "I couldn't find any upcoming appointments for that email address. Could you double-check the email or provide your booking confirmation number?"
+      };
+    }
+    
     // Try to match the date and time using chrono
     const matchedBooking = findBestMatch(activeBookings, appointment_date, appointment_time);
     
@@ -332,23 +361,58 @@ async function handleFindBookingByDate(args) {
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-        timeZoneName: 'short'
+        timeZone: 'America/Denver'
       });
       
       return {
+        success: true,
+        message: `Found your appointment! It's scheduled for ${bookingDateTime}.`,
         booking_uid: matchedBooking.uid,
-        booking_details: bookingDateTime
+        booking_details: bookingDateTime,
+        search_criteria: {
+          email: email,
+          requested_date: appointment_date,
+          requested_time: appointment_time
+        }
       };
     } else {
+      // If no exact match, provide helpful info about available appointments
+      const availableAppointments = activeBookings.map(booking => {
+        return new Date(booking.start).toLocaleString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZone: 'America/Denver'
+        });
+      }).join(', ');
+      
       return {
-        error: "I couldn't find an appointment matching that date and time. Could you please double-check the details or provide your booking confirmation number?"
+        success: false,
+        error: "No matching appointment found",
+        message: `I couldn't find an appointment matching ${appointment_date} at ${appointment_time}. I found these upcoming appointments for ${email}: ${availableAppointments}. Could you clarify which one you meant?`,
+        available_appointments: activeBookings.map(booking => ({
+          booking_uid: booking.uid,
+          datetime: new Date(booking.start).toLocaleString('en-US', {
+            weekday: 'long',
+            month: 'long', 
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            timeZone: 'America/Denver'
+          })
+        }))
       };
     }
     
   } catch (error) {
     console.error('Find booking error:', error);
+    
     return {
-      error: "I'm having trouble finding your appointment. Please try again or contact our office directly."
+      success: false,
+      error: error.message,
+      message: "I'm having trouble finding your appointment. Please try again or contact our office directly."
     };
   }
 }

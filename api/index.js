@@ -24,9 +24,13 @@ module.exports = async (req, res) => {
     return res.json({ message: 'Cal.com Retell webhook server is running!' });
   }
   
-  if (req.method === 'POST') {
-    try {
-      console.log('Received request:', req.body);
+if (req.method === 'POST') {
+  try {
+    console.log('=== WEBHOOK DEBUG ===');
+    console.log('Full request body:', JSON.stringify(req.body, null, 2));
+    console.log('Function name:', req.body.name);
+    console.log('Function args:', req.body.args);
+    console.log('==================');
       
       const { name, args } = req.body;
       

@@ -31,7 +31,31 @@ if (req.method === 'POST') {
     console.log('Function name:', req.body.name);
     console.log('Function args:', req.body.args);
     console.log('==================');
+
+if (req.body.event) {
+      const { event, call_id, data } = req.body;
       
+      console.log(`System event: ${event} for call: ${call_id}`);
+      
+      // Just acknowledge system events - don't try to process them as functions
+      switch (event) {
+        case 'call_started':
+          console.log('Call started:', call_id);
+          return res.json({ success: true, message: 'Call started event received' });
+          
+        case 'call_ended':
+          console.log('Call ended:', call_id);
+          return res.json({ success: true, message: 'Call ended event received' });
+          
+        case 'call_analyzed':
+          console.log('Call analyzed:', call_id);
+          return res.json({ success: true, message: 'Call analyzed event received' });
+          
+        default:
+          console.log('Unknown system event:', event);
+          return res.json({ success: true, message: 'System event received' });
+      }
+    }
       const { name, args } = req.body;
       
 // Handle direct parameter format from Retell

@@ -1091,17 +1091,28 @@ async function handleTestCreateCall(args) {
 function parseToUTC(dateTimeString, timezone = 'America/Denver') {
   console.log(`[parseToUTC] Parsing: "${dateTimeString}" in timezone: ${timezone}`);
   
-  // Use chrono with timezone support
-  const parsed = chrono.parseDate(dateTimeString, new Date(), { timezone });
+  // Parse the date/time string as if it's in Mountain Time
+  const parsed = chrono.parseDate(dateTimeString, new Date());
   
   if (!parsed) {
     console.error(`[parseToUTC] Could not parse: ${dateTimeString}`);
     throw new Error(`Could not parse date/time: ${dateTimeString}`);
   }
   
-  // Chrono already handles timezone conversion when you specify it
-  const utcString = parsed.toISOString();
-  console.log(`[parseToUTC] Result: ${utcString}`);
+  console.log(`[parseToUTC] Chrono parsed as local: ${parsed.toISOString()}`);
+  
+  // Create a date object representing the same time but in Mountain Time
+  // We need to manually adjust for Mountain Time offset
+  
+  // In July, Mountain Time is MDT (UTC-6)
+  const mountainOffsetHours = 6; // MDT is UTC-6
+  const mountainOffsetMs = mountainOffsetHours * 60 * 60 * 1000;
+  
+  // Add the offset to convert from Mountain Time to UTC
+  const utcTime = new Date(parsed.getTime() + mountainOffsetMs);
+  
+  const utcString = utcTime.toISOString();
+  console.log(`[parseToUTC] Final UTC result: ${utcString}`);
   return utcString;
 }
 

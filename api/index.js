@@ -506,7 +506,7 @@ function findBestMatch(bookings, dateStr, timeStr) {
   }
 }
 
-// ---- FIXED: Check Availability with Actual Available Time Slots ----
+// ---- FIXED: Check Availability using Cal.com Slots API ----
 async function handleCheckAvailability(args) {
   const { date, start_time, end_time, timezone = "America/Denver" } = args;
   
@@ -538,25 +538,36 @@ async function handleCheckAvailability(args) {
       };
     }
     
-    // Get the start and end of the requested day
+    // Get start and end of the requested day for Cal.com slots API
     const startOfDay = new Date(dateObj);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(dateObj);
     endOfDay.setHours(23, 59, 59, 999);
     
     try {
-      // Check existing bookings on Cal.com for that day
-      const response = await fetch(`https://api.cal.com/v2/bookings?start=${startOfDay.toISOString()}&end=${endOfDay.toISOString()}`, {
+      // Use Cal.com's slots API to get actual available time slots
+      const slotsUrl = new URL('https://api.cal.com/v1/slots');
+      slotsUrl.searchParams.append('apiKey', process.env.CAL_API_KEY);
+      slotsUrl.searchParams.append('eventTypeId', '2694982'); // Your event type ID
+      slotsUrl.searchParams.append('startTime', startOfDay.toISOString());
+      slotsUrl.searchParams.append('endTime', endOfDay.toISOString());
+      slotsUrl.searchParams.append('timeZone', 'America/Denver');
+      
+      console.log('Fetching slots from Cal.com:', slotsUrl.toString());
+      
+      const response = await fetch(slotsUrl.toString(), {
         method: 'GET',
         headers: {
-          'cal-api-version': '2024-08-13',
-          'Authorization': `Bearer ${process.env.CAL_API_KEY}`
+          'Content-Type': 'application/json'
         }
       });
       
       if (!response.ok) {
-        console.error('Cal.com API error:', response.status);
-        // If API fails, just return business hours info
+        console.error('Cal.com slots API error:', response.status);
+        const errorText = await response.text();
+        console.error('Error details:', errorText);
+        
+        // Fallback to basic business hours response
         return {
           available: true,
           availability_details: {
@@ -569,49 +580,34 @@ async function handleCheckAvailability(args) {
         };
       }
       
-      const bookingsData = await response.json();
-      const dayBookings = bookingsData.data || [];
-      const acceptedBookings = dayBookings.filter(booking => booking.status === 'accepted');
+      const slotsData = await response.json();
+      console.log('Cal.com slots response:', JSON.stringify(slotsData, null, 2));
       
-      console.log(`Found ${acceptedBookings.length} existing bookings on ${dateObj.toDateString()}`);
+      // Extract slots for the requested date
+      const dateString = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const availableSlots = slotsData.slots?.[dateString] || [];
       
-      // Generate all possible appointment slots for the day
-      const allSlots = generateDaySlots(dateObj, businessHours.business_hours);
-      
-      // Filter out slots that conflict with existing bookings
-      const availableSlots = allSlots.filter(slot => {
-        return !acceptedBookings.some(booking => {
-          const bookingStart = new Date(booking.start);
-          const bookingEnd = new Date(booking.end);
-          const slotStart = new Date(slot.start);
-          const slotEnd = new Date(slot.end);
-          
-          // Check if slot overlaps with any existing booking
-          return (slotStart < bookingEnd && slotEnd > bookingStart);
-        });
-      });
-      
-      console.log(`Generated ${allSlots.length} total slots, ${availableSlots.length} available`);
-
-      console.log('=== SLOT DEBUG ===');
-availableSlots.slice(0, 3).forEach((slot, index) => {
-  const startTime = new Date(slot.start);
-  console.log(`Slot ${index}:`);
-  console.log(`  ISO: ${slot.start}`);
-  console.log(`  Local: ${startTime.toLocaleString()}`);
-  console.log(`  MT: ${startTime.toLocaleString('en-US', { timeZone: 'America/Denver' })}`);
-  console.log(`  Formatted: ${formatTimeSlot(startTime)}`);
-});
-console.log('==================');
+      console.log(`Found ${availableSlots.length} available slots for ${dateString}`);
       
       if (availableSlots.length > 0) {
         // Format available times for display
-        const availableTimes = availableSlots.map(slot => 
-          formatTimeSlot(new Date(slot.start))
-        );
+        const availableTimes = availableSlots.map(slot => {
+          const slotTime = new Date(slot.time);
+          return slotTime.toLocaleString('en-US', {
+            hour: 'numeric',
+            minute: slotTime.getMinutes() === 0 ? undefined : '2-digit',
+            hour12: true,
+            timeZone: 'America/Denver'
+          });
+        });
         
         // Create a helpful message with specific available times
-        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        const dayName = dateObj.toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          month: 'long', 
+          day: 'numeric',
+          timeZone: 'America/Denver'
+        });
         
         let message;
         if (availableSlots.length === 1) {
@@ -629,7 +625,6 @@ console.log('==================');
           availability_details: {
             available: true,
             message: message,
-            existing_bookings: acceptedBookings.length,
             available_slots: availableSlots.length,
             available_times: availableTimes,
             business_hours: businessHours.business_hours
@@ -637,13 +632,18 @@ console.log('==================');
           date_checked: date
         };
       } else {
-        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        const dayName = dateObj.toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          month: 'long', 
+          day: 'numeric',
+          timeZone: 'America/Denver'
+        });
+        
         return {
           available: false,
           availability_details: {
             available: false,
-            message: `We appear to be fully booked on ${dayName}. Would you like to try a different day?`,
-            existing_bookings: acceptedBookings.length,
+            message: `We don't have any available appointments on ${dayName}. Would you like to try a different day?`,
             available_slots: 0,
             business_hours: businessHours.business_hours
           },
@@ -652,8 +652,9 @@ console.log('==================');
       }
       
     } catch (apiError) {
-      console.error('Cal.com API error:', apiError);
-      // Fallback to just business hours if API fails
+      console.error('Cal.com slots API error:', apiError);
+      
+      // Fallback to basic business hours response
       return {
         available: true,
         availability_details: {
@@ -678,55 +679,6 @@ console.log('==================');
       date_checked: date
     };
   }
-}
-
-// Helper function to generate all possible appointment slots for a day
-function generateDaySlots(dateObj, businessHours) {
-  const slots = [];
-  
-  // Parse business hours to get start and end times
-  let startHour, endHour;
-  
-  if (businessHours.includes('9:00 AM to 5:00 PM')) {
-    startHour = 9;
-    endHour = 17;
-  } else if (businessHours.includes('9:00 AM to 4:00 PM')) {
-    startHour = 9;
-    endHour = 16;
-  } else {
-    startHour = 9;
-    endHour = 17;
-  }
-  
-  console.log(`Generating slots from ${startHour} to ${endHour}`);
-  
-  // Generate slots in Mountain Time by adding 6 hours to compensate for UTC conversion
-  for (let hour = startHour; hour < endHour; hour++) {
-    const year = dateObj.getFullYear();
-    const month = dateObj.getMonth();
-    const day = dateObj.getDate();
-    
-    // Add 6 hours to compensate for Mountain Time (UTC-6 in summer)
-    const slotStart = new Date(year, month, day, hour + 6, 0, 0);
-    const slotEnd = new Date(year, month, day, hour + 7, 0, 0);
-    
-    slots.push({
-      start: slotStart.toISOString(),
-      end: slotEnd.toISOString()
-    });
-  }
-  
-  return slots;
-}
-
-// Helper function to format time slot for display
-function formatTimeSlot(dateTime) {
-  return dateTime.toLocaleString('en-US', {
-    hour: 'numeric',
-    minute: dateTime.getMinutes() === 0 ? undefined : '2-digit',
-    hour12: true,
-    timeZone: 'America/Denver'
-  });
 }
 
 // ---- UPDATED: Business Hours with Date Object ----

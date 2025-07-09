@@ -719,6 +719,36 @@ function formatTimeSlot(dateTime) {
     timeZone: 'America/Denver'
   });
 }
+
+// ---- UPDATED: Business Hours with Date Object ----
+function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {
+  const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday
+  
+  console.log('Date:', dateObj.toDateString(), 'Day of week:', dayOfWeek);
+  
+  if (dayOfWeek === 0) { // Sunday
+    return {
+      available: false,
+      message: "We're closed on Sundays",
+      business_hours: "Closed"
+    };
+  }
+  
+  let hours = '';
+  if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday-Friday
+    hours = "9:00 AM to 5:00 PM";
+  } else if (dayOfWeek === 6) { // Saturday
+    hours = "9:00 AM to 4:00 PM";
+  }
+  
+  return {
+    available: true,
+    message: `Available during business hours: ${hours}`,
+    business_hours: hours,
+    date: dateObj.toDateString()
+  };
+}
+
 // ---- UPDATED: Book Appointment with Chrono ----
 async function handleBookAppointment(args) {
   const { 

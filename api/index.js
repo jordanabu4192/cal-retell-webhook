@@ -996,6 +996,24 @@ async function handleTriggerReminders(args) {
         weekday: 'long', 
         timeZone: 'America/Denver' 
       });
+      
+      const appointmentStart = new Date(appointment.start);
+      const appointmentHour = parseInt(appointmentStart.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        hourCycle: 'h23',
+        timeZone: 'America/Denver'
+      }).split(':')[0]);
+
+      let appointmentTimeOfDay;
+      if (appointmentHour >= 5 && appointmentHour < 12) {
+        appointmentTimeOfDay = "morning";
+      } else if (appointmentHour >= 12 && appointmentHour < 17) { // 12 PM (noon) to 4:59 PM
+        appointmentTimeOfDay = "afternoon";
+      } else if (appointmentHour >= 17 && appointmentHour < 22) { // 5 PM to 9:59 PM
+        appointmentTimeOfDay = "evening";
+      } else { // 10 PM to 4:59 AM
+        appointmentTimeOfDay = "late night"; // Or just "tonight" / "" depending on preference
+      }
 
       // Trigger Retell outbound call
       const callResult = await fetch('https://api.retellai.com/v2/create-phone-call', {

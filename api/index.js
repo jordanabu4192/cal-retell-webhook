@@ -678,27 +678,26 @@ function generateDaySlots(dateObj, businessHours) {
   
   if (businessHours.includes('9:00 AM to 5:00 PM')) {
     startHour = 9;
-    endHour = 17; // 5 PM in 24-hour format
+    endHour = 17;
   } else if (businessHours.includes('9:00 AM to 4:00 PM')) {
     startHour = 9;
-    endHour = 16; // 4 PM in 24-hour format
+    endHour = 16;
   } else {
-    // Default fallback
     startHour = 9;
     endHour = 17;
   }
   
-  console.log(`Generating slots from ${startHour} to ${endHour} for ${dateObj.toDateString()}`);
+  console.log(`Generating slots from ${startHour} to ${endHour}`);
   
-  // Generate 1-hour slots during business hours
+  // Generate slots in Mountain Time
   for (let hour = startHour; hour < endHour; hour++) {
-    // Create slot start time: copy the date and set the hour
-    const slotStart = new Date(dateObj.getTime());
-    slotStart.setHours(hour, 0, 0, 0);
+    // Create Mountain Time date
+    const year = dateObj.getFullYear();
+    const month = dateObj.getMonth();
+    const day = dateObj.getDate();
     
-    // Create slot end time: copy the date and set the hour + 1
-    const slotEnd = new Date(dateObj.getTime());
-    slotEnd.setHours(hour + 1, 0, 0, 0);
+    const slotStart = new Date(year, month, day, hour, 0, 0);
+    const slotEnd = new Date(year, month, day, hour + 1, 0, 0);
     
     slots.push({
       start: slotStart.toISOString(),
@@ -706,7 +705,6 @@ function generateDaySlots(dateObj, businessHours) {
     });
   }
   
-  console.log(`Generated ${slots.length} slots`);
   return slots;
 }
 

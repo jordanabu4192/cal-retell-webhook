@@ -584,7 +584,7 @@ async function handleCheckAvailability(args) {
       console.log('Cal.com slots response:', JSON.stringify(slotsData, null, 2));
       
       // Extract slots for the requested date
-      const dateString = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const dateString = dateObj.toISOString().split('T')[0]; //YYYY-MM-DD format
       const availableSlots = slotsData.slots?.[dateString] || [];
       
       console.log(`Found ${availableSlots.length} available slots for ${dateString}`);
@@ -959,7 +959,7 @@ async function handleGetTomorrowAppointments(args) {
   }
 }
 
-// ---- UNCHANGED: Trigger Reminders ----
+// ---- AMENDED: Trigger Reminders ----
 async function handleTriggerReminders(args) {
   try {
     // Get tomorrow's appointments
@@ -978,6 +978,25 @@ async function handleTriggerReminders(args) {
       }
       console.log('Calling phone:', phone);
       
+      // Calculate time-of-day greeting
+      const nowInSF = new Date().toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Denver' });
+      const currentHourSF = parseInt(nowInSF.split(':')[0]);
+      
+      let timeOfDayGreeting;
+      if (currentHourSF >= 5 && currentHourSF < 12) {
+        timeOfDayGreeting = "Good morning";
+      } else if (currentHourSF >= 12 && currentHourSF < 17) {
+        timeOfDayGreeting = "Good afternoon";
+      } else {
+        timeOfDayGreeting = "Hello"; // Or "Good evening" if you want a specific evening greeting
+      }
+
+      // Get appointment day of week
+      const appointmentDayOfWeek = new Date(appointment.start).toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        timeZone: 'America/Denver' 
+      });
+
       // Trigger Retell outbound call
       const callResult = await fetch('https://api.retellai.com/v2/create-phone-call', {
         method: 'POST',
@@ -990,22 +1009,28 @@ async function handleTriggerReminders(args) {
           to_number: phone,
           override_agent_id: 'agent_2647fcddc05b42bbf5096eeae3',
           retell_llm_dynamic_variables: {
-  patient_name: appointment.attendees[0].name,
-  appointment_date: new Date(appointment.start).toLocaleDateString(),
-  appointment_time: new Date(appointment.start).toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'America/Denver'
-  }),
-  booking_uid: appointment.uid,
-  current_date: new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric', 
-    month: 'long',
-    day: 'numeric',
-    timeZone: 'America/Denver'
-  })
-}
+            patient_name: appointment.attendees[0].name,
+            appointment_date: new Date(appointment.start).toLocaleDateString('en-US', { 
+              month: 'long', 
+              day: 'numeric',
+              timeZone: 'America/Denver' 
+            }), // Formatted for AI prompt
+            appointment_day_of_week: appointmentDayOfWeek, // New variable
+            appointment_time: new Date(appointment.start).toLocaleTimeString('en-US', {
+              hour: 'numeric',
+              minute: '2-digit',
+              timeZone: 'America/Denver'
+            }),
+            booking_uid: appointment.uid,
+            current_date: new Date().toLocaleDateString('en-US', {
+              weekday: 'long',
+              year: 'numeric', 
+              month: 'long',
+              day: 'numeric',
+              timeZone: 'America/Denver'
+            }),
+            time_of_day_greeting: timeOfDayGreeting // NEW: Pass the greeting
+          }
         })
       });
       

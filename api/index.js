@@ -1010,6 +1010,7 @@ async function handleTriggerReminders(args) {
           override_agent_id: 'agent_2647fcddc05b42bbf5096eeae3',
           retell_llm_dynamic_variables: {
             patient_name: appointment.attendees[0].name,
+            patient_first_name: appointment.attendees[0].name.split(' ')[0], 
             appointment_date: new Date(appointment.start).toLocaleDateString('en-US', { 
               month: 'long', 
               day: 'numeric',

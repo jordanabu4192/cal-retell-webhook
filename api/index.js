@@ -592,6 +592,17 @@ async function handleCheckAvailability(args) {
       });
       
       console.log(`Generated ${allSlots.length} total slots, ${availableSlots.length} available`);
+
+      console.log('=== SLOT DEBUG ===');
+availableSlots.slice(0, 3).forEach((slot, index) => {
+  const startTime = new Date(slot.start);
+  console.log(`Slot ${index}:`);
+  console.log(`  ISO: ${slot.start}`);
+  console.log(`  Local: ${startTime.toLocaleString()}`);
+  console.log(`  MT: ${startTime.toLocaleString('en-US', { timeZone: 'America/Denver' })}`);
+  console.log(`  Formatted: ${formatTimeSlot(startTime)}`);
+});
+console.log('==================');
       
       if (availableSlots.length > 0) {
         // Format available times for display

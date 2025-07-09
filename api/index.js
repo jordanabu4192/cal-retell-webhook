@@ -690,21 +690,15 @@ function generateDaySlots(dateObj, businessHours) {
   
   console.log(`Generating slots from ${startHour} to ${endHour} for ${dateObj.toDateString()}`);
   
-  // Create a new date object for the target day in Mountain Time
-  const targetDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
-  
-  // Generate 1-hour slots (you can adjust this based on your typical appointment length)
+  // Generate 1-hour slots during business hours
   for (let hour = startHour; hour < endHour; hour++) {
-    // Create the slot time in Mountain Time zone
-    const slotStart = new Date();
-    slotStart.setFullYear(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    // Create slot start time: copy the date and set the hour
+    const slotStart = new Date(dateObj.getTime());
     slotStart.setHours(hour, 0, 0, 0);
     
-    const slotEnd = new Date();
-    slotEnd.setFullYear(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    // Create slot end time: copy the date and set the hour + 1
+    const slotEnd = new Date(dateObj.getTime());
     slotEnd.setHours(hour + 1, 0, 0, 0);
-    
-    console.log(`Generated slot ${hour}: ${formatTimeSlot(slotStart)} - ${formatTimeSlot(slotEnd)}`);
     
     slots.push({
       start: slotStart.toISOString(),
@@ -712,7 +706,7 @@ function generateDaySlots(dateObj, businessHours) {
     });
   }
   
-  console.log(`Total slots generated: ${slots.length}`);
+  console.log(`Generated ${slots.length} slots`);
   return slots;
 }
 

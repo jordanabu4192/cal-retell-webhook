@@ -688,13 +688,20 @@ function generateDaySlots(dateObj, businessHours) {
     endHour = 17;
   }
   
+  console.log(`Generating slots from ${startHour} to ${endHour} for ${dateObj.toDateString()}`);
+  
+  // Create a new date object for the target day in Mountain Time
+  const targetDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+  
   // Generate 1-hour slots (you can adjust this based on your typical appointment length)
   for (let hour = startHour; hour < endHour; hour++) {
-    const slotStart = new Date(dateObj);
+    const slotStart = new Date(targetDate);
     slotStart.setHours(hour, 0, 0, 0);
     
-    const slotEnd = new Date(dateObj);
+    const slotEnd = new Date(targetDate);
     slotEnd.setHours(hour + 1, 0, 0, 0);
+    
+    console.log(`Generated slot: ${slotStart.toLocaleString()} - ${slotEnd.toLocaleString()}`);
     
     slots.push({
       start: slotStart.toISOString(),
@@ -702,6 +709,7 @@ function generateDaySlots(dateObj, businessHours) {
     });
   }
   
+  console.log(`Total slots generated: ${slots.length}`);
   return slots;
 }
 
@@ -713,35 +721,6 @@ function formatTimeSlot(dateTime) {
     timeZone: 'America/Denver'
   });
 }
-// ---- UPDATED: Business Hours with Date Object ----
-function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {
-  const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday
-  
-  console.log('Date:', dateObj.toDateString(), 'Day of week:', dayOfWeek);
-  
-  if (dayOfWeek === 0) { // Sunday
-    return {
-      available: false,
-      message: "We're closed on Sundays",
-      business_hours: "Closed"
-    };
-  }
-  
-  let hours = '';
-  if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday-Friday
-    hours = "9:00 AM to 5:00 PM";
-  } else if (dayOfWeek === 6) { // Saturday
-    hours = "9:00 AM to 4:00 PM";
-  }
-  
-  return {
-    available: true,
-    message: `Available during business hours: ${hours}`,
-    business_hours: hours,
-    date: dateObj.toDateString()
-  };
-}
-
 // ---- UPDATED: Book Appointment with Chrono ----
 async function handleBookAppointment(args) {
   const { 

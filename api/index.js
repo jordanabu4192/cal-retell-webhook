@@ -700,15 +700,15 @@ function generateDaySlots(dateObj, businessHours) {
   
   console.log(`Generating slots from ${startHour} to ${endHour}`);
   
-  // Generate slots in Mountain Time
+  // Generate slots in Mountain Time by adding 6 hours to compensate for UTC conversion
   for (let hour = startHour; hour < endHour; hour++) {
-    // Create Mountain Time date
     const year = dateObj.getFullYear();
     const month = dateObj.getMonth();
     const day = dateObj.getDate();
     
-    const slotStart = new Date(year, month, day, hour, 0, 0);
-    const slotEnd = new Date(year, month, day, hour + 1, 0, 0);
+    // Add 6 hours to compensate for Mountain Time (UTC-6 in summer)
+    const slotStart = new Date(year, month, day, hour + 6, 0, 0);
+    const slotEnd = new Date(year, month, day, hour + 7, 0, 0);
     
     slots.push({
       start: slotStart.toISOString(),

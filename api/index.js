@@ -695,13 +695,16 @@ function generateDaySlots(dateObj, businessHours) {
   
   // Generate 1-hour slots (you can adjust this based on your typical appointment length)
   for (let hour = startHour; hour < endHour; hour++) {
-    const slotStart = new Date(targetDate);
+    // Create the slot time in Mountain Time zone
+    const slotStart = new Date();
+    slotStart.setFullYear(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
     slotStart.setHours(hour, 0, 0, 0);
     
-    const slotEnd = new Date(targetDate);
+    const slotEnd = new Date();
+    slotEnd.setFullYear(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
     slotEnd.setHours(hour + 1, 0, 0, 0);
     
-    console.log(`Generated slot: ${slotStart.toLocaleString()} - ${slotEnd.toLocaleString()}`);
+    console.log(`Generated slot ${hour}: ${formatTimeSlot(slotStart)} - ${formatTimeSlot(slotEnd)}`);
     
     slots.push({
       start: slotStart.toISOString(),
@@ -718,6 +721,7 @@ function formatTimeSlot(dateTime) {
   return dateTime.toLocaleString('en-US', {
     hour: 'numeric',
     minute: dateTime.getMinutes() === 0 ? undefined : '2-digit',
+    hour12: true,
     timeZone: 'America/Denver'
   });
 }

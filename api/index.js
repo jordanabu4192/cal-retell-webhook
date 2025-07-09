@@ -506,7 +506,7 @@ function findBestMatch(bookings, dateStr, timeStr) {
   }
 }
 
-// ---- FIXED: Check Availability with Real Cal.com Integration ----
+// ---- FIXED: Check Availability with Actual Available Time Slots ----
 async function handleCheckAvailability(args) {
   const { date, start_time, end_time, timezone = "America/Denver" } = args;
   
@@ -575,20 +575,43 @@ async function handleCheckAvailability(args) {
       
       console.log(`Found ${acceptedBookings.length} existing bookings on ${dateObj.toDateString()}`);
       
-      // Simple availability logic - you can make this more sophisticated
-      const maxDailySlots = businessHours.business_hours.includes('5:00 PM') ? 8 : 7; // Rough estimate
-      const availableSlots = Math.max(0, maxDailySlots - acceptedBookings.length);
+      // Generate all possible appointment slots for the day
+      const allSlots = generateDaySlots(dateObj, businessHours.business_hours);
       
-      if (availableSlots > 0) {
-        let message = `Great! We have availability on ${dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`;
+      // Filter out slots that conflict with existing bookings
+      const availableSlots = allSlots.filter(slot => {
+        return !acceptedBookings.some(booking => {
+          const bookingStart = new Date(booking.start);
+          const bookingEnd = new Date(booking.end);
+          const slotStart = new Date(slot.start);
+          const slotEnd = new Date(slot.end);
+          
+          // Check if slot overlaps with any existing booking
+          return (slotStart < bookingEnd && slotEnd > bookingStart);
+        });
+      });
+      
+      console.log(`Generated ${allSlots.length} total slots, ${availableSlots.length} available`);
+      
+      if (availableSlots.length > 0) {
+        // Format available times for display
+        const availableTimes = availableSlots.map(slot => 
+          formatTimeSlot(new Date(slot.start))
+        );
         
-        if (acceptedBookings.length > 0) {
-          message += `. We have ${acceptedBookings.length} appointment(s) already booked, with approximately ${availableSlots} slots remaining`;
+        // Create a helpful message with specific available times
+        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        
+        let message;
+        if (availableSlots.length === 1) {
+          message = `Great! We have 1 available time slot on ${dayName}: ${availableTimes[0]}.`;
+        } else if (availableSlots.length <= 3) {
+          message = `Great! We have ${availableSlots.length} available time slots on ${dayName}: ${availableTimes.join(', ')}.`;
         } else {
-          message += ` with our full schedule open`;
+          // Show first few options
+          const firstThree = availableTimes.slice(0, 3).join(', ');
+          message = `Great! We have ${availableSlots.length} available time slots on ${dayName}. Some options include: ${firstThree} and ${availableSlots.length - 3} more.`;
         }
-        
-        message += ` during business hours: ${businessHours.business_hours}.`;
         
         return {
           available: true,
@@ -596,18 +619,21 @@ async function handleCheckAvailability(args) {
             available: true,
             message: message,
             existing_bookings: acceptedBookings.length,
-            estimated_available_slots: availableSlots,
+            available_slots: availableSlots.length,
+            available_times: availableTimes,
             business_hours: businessHours.business_hours
           },
           date_checked: date
         };
       } else {
+        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
         return {
           available: false,
           availability_details: {
             available: false,
-            message: `We appear to be fully booked on ${dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}. Would you like to try a different day?`,
+            message: `We appear to be fully booked on ${dayName}. Would you like to try a different day?`,
             existing_bookings: acceptedBookings.length,
+            available_slots: 0,
             business_hours: businessHours.business_hours
           },
           date_checked: date
@@ -641,6 +667,51 @@ async function handleCheckAvailability(args) {
       date_checked: date
     };
   }
+}
+
+// Helper function to generate all possible appointment slots for a day
+function generateDaySlots(dateObj, businessHours) {
+  const slots = [];
+  
+  // Parse business hours to get start and end times
+  let startHour, endHour;
+  
+  if (businessHours.includes('9:00 AM to 5:00 PM')) {
+    startHour = 9;
+    endHour = 17; // 5 PM in 24-hour format
+  } else if (businessHours.includes('9:00 AM to 4:00 PM')) {
+    startHour = 9;
+    endHour = 16; // 4 PM in 24-hour format
+  } else {
+    // Default fallback
+    startHour = 9;
+    endHour = 17;
+  }
+  
+  // Generate 1-hour slots (you can adjust this based on your typical appointment length)
+  for (let hour = startHour; hour < endHour; hour++) {
+    const slotStart = new Date(dateObj);
+    slotStart.setHours(hour, 0, 0, 0);
+    
+    const slotEnd = new Date(dateObj);
+    slotEnd.setHours(hour + 1, 0, 0, 0);
+    
+    slots.push({
+      start: slotStart.toISOString(),
+      end: slotEnd.toISOString()
+    });
+  }
+  
+  return slots;
+}
+
+// Helper function to format time slot for display
+function formatTimeSlot(dateTime) {
+  return dateTime.toLocaleString('en-US', {
+    hour: 'numeric',
+    minute: dateTime.getMinutes() === 0 ? undefined : '2-digit',
+    timeZone: 'America/Denver'
+  });
 }
 // ---- UPDATED: Business Hours with Date Object ----
 function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {

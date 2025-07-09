@@ -182,23 +182,6 @@ if (name === 'send_confirmation_email') {
   return res.status(405).json({ error: "Method not allowed" });
 };
 
-// ---- NEW: Improved Timezone Utility with Chrono ----
-function parseToUTC(dateTimeString, timezone = 'America/Denver') {
-  console.log(`[parseToUTC] Parsing: "${dateTimeString}" in timezone: ${timezone}`);
-  
-  // Chrono can handle natural language and standard formats
-  const parsed = chrono.parseDate(dateTimeString, new Date(), { timezone });
-  
-  if (!parsed) {
-    console.error(`[parseToUTC] Could not parse: ${dateTimeString}`);
-    throw new Error(`Could not parse date/time: ${dateTimeString}`);
-  }
-  
-  const utcString = parsed.toISOString();
-  console.log(`[parseToUTC] Result: ${utcString}`);
-  return utcString;
-}
-
 function parseToMountainTime(dateTimeString) {
   const parsed = chrono.parseDate(dateTimeString, new Date(), { timezone: 'America/Denver' });
   
@@ -1108,24 +1091,17 @@ async function handleTestCreateCall(args) {
 function parseToUTC(dateTimeString, timezone = 'America/Denver') {
   console.log(`[parseToUTC] Parsing: "${dateTimeString}" in timezone: ${timezone}`);
   
-  // Parse with chrono first
-  const parsed = chrono.parseDate(dateTimeString, new Date());
+  // Use chrono with timezone support
+  const parsed = chrono.parseDate(dateTimeString, new Date(), { timezone });
   
   if (!parsed) {
     console.error(`[parseToUTC] Could not parse: ${dateTimeString}`);
     throw new Error(`Could not parse date/time: ${dateTimeString}`);
   }
   
-  console.log(`[parseToUTC] Chrono parsed as: ${parsed.toISOString()}`);
-  
-  // Treat the parsed time as Mountain Time and convert to UTC
-  // Mountain Time is UTC-6 in summer (MDT), UTC-7 in winter (MST)
-  // For July, we're in MDT (UTC-6)
-  const mountainOffset = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
-  const utcTime = new Date(parsed.getTime() + mountainOffset);
-  
-  const utcString = utcTime.toISOString();
-  console.log(`[parseToUTC] Final UTC result: ${utcString}`);
+  // Chrono already handles timezone conversion when you specify it
+  const utcString = parsed.toISOString();
+  console.log(`[parseToUTC] Result: ${utcString}`);
   return utcString;
 }
 

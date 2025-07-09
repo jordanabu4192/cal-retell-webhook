@@ -506,7 +506,7 @@ function findBestMatch(bookings, dateStr, timeStr) {
   }
 }
 
-// ---- UPDATED: Check Availability with Chrono ----
+// ---- FIXED: Check Availability with Real Cal.com Integration ----
 async function handleCheckAvailability(args) {
   const { date, start_time, end_time, timezone = "America/Denver" } = args;
   
@@ -527,7 +527,7 @@ async function handleCheckAvailability(args) {
       };
     }
     
-    // Check business hours
+    // Check if it's a business day first
     const businessHours = getBusinessHoursAvailability(dateObj, start_time, end_time);
     
     if (!businessHours.available) {
@@ -538,41 +538,96 @@ async function handleCheckAvailability(args) {
       };
     }
     
-    // Check for existing bookings
+    // Get the start and end of the requested day
     const startOfDay = new Date(dateObj);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(dateObj);
     endOfDay.setHours(23, 59, 59, 999);
     
-    const response = await fetch(`https://api.cal.com/v2/bookings?start=${startOfDay.toISOString()}&end=${endOfDay.toISOString()}`, {
-      method: 'GET',
-      headers: {
-        'cal-api-version': '2024-08-13',
-        'Authorization': `Bearer ${process.env.CAL_API_KEY}`
+    try {
+      // Check existing bookings on Cal.com for that day
+      const response = await fetch(`https://api.cal.com/v2/bookings?start=${startOfDay.toISOString()}&end=${endOfDay.toISOString()}`, {
+        method: 'GET',
+        headers: {
+          'cal-api-version': '2024-08-13',
+          'Authorization': `Bearer ${process.env.CAL_API_KEY}`
+        }
+      });
+      
+      if (!response.ok) {
+        console.error('Cal.com API error:', response.status);
+        // If API fails, just return business hours info
+        return {
+          available: true,
+          availability_details: {
+            available: true,
+            message: `${businessHours.message}. Please call to confirm specific time availability.`,
+            business_hours: businessHours.business_hours,
+            note: "Unable to check real-time availability"
+          },
+          date_checked: date
+        };
       }
-    });
-    
-    let bookingConflicts = 0;
-    if (response.ok) {
+      
       const bookingsData = await response.json();
       const dayBookings = bookingsData.data || [];
-      bookingConflicts = dayBookings.filter(booking => booking.status === 'accepted').length;
-      console.log(`Found ${bookingConflicts} existing bookings on ${date}`);
+      const acceptedBookings = dayBookings.filter(booking => booking.status === 'accepted');
+      
+      console.log(`Found ${acceptedBookings.length} existing bookings on ${dateObj.toDateString()}`);
+      
+      // Simple availability logic - you can make this more sophisticated
+      const maxDailySlots = businessHours.business_hours.includes('5:00 PM') ? 8 : 7; // Rough estimate
+      const availableSlots = Math.max(0, maxDailySlots - acceptedBookings.length);
+      
+      if (availableSlots > 0) {
+        let message = `Great! We have availability on ${dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`;
+        
+        if (acceptedBookings.length > 0) {
+          message += `. We have ${acceptedBookings.length} appointment(s) already booked, with approximately ${availableSlots} slots remaining`;
+        } else {
+          message += ` with our full schedule open`;
+        }
+        
+        message += ` during business hours: ${businessHours.business_hours}.`;
+        
+        return {
+          available: true,
+          availability_details: {
+            available: true,
+            message: message,
+            existing_bookings: acceptedBookings.length,
+            estimated_available_slots: availableSlots,
+            business_hours: businessHours.business_hours
+          },
+          date_checked: date
+        };
+      } else {
+        return {
+          available: false,
+          availability_details: {
+            available: false,
+            message: `We appear to be fully booked on ${dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}. Would you like to try a different day?`,
+            existing_bookings: acceptedBookings.length,
+            business_hours: businessHours.business_hours
+          },
+          date_checked: date
+        };
+      }
+      
+    } catch (apiError) {
+      console.error('Cal.com API error:', apiError);
+      // Fallback to just business hours if API fails
+      return {
+        available: true,
+        availability_details: {
+          available: true,
+          message: `${businessHours.message}. I'm having trouble checking our booking system, so please call to confirm specific time availability.`,
+          business_hours: businessHours.business_hours,
+          note: "Real-time availability check failed"
+        },
+        date_checked: date
+      };
     }
-    
-    const availabilityInfo = {
-      ...businessHours,
-      existing_bookings: bookingConflicts,
-      message: bookingConflicts > 0 
-        ? `${businessHours.message}. We have ${bookingConflicts} appointment(s) already booked for this day.`
-        : `${businessHours.message}. This day looks wide open!`
-    };
-    
-    return {
-      available: true,
-      availability_details: availabilityInfo,
-      date_checked: date
-    };
     
   } catch (error) {
     console.error('Check availability error:', error);
@@ -581,13 +636,12 @@ async function handleCheckAvailability(args) {
       available: false,
       availability_details: {
         available: false,
-        message: "I'm having trouble checking that date. Please try again."
+        message: "I'm having trouble checking that date. Please try again or call our office."
       },
       date_checked: date
     };
   }
 }
-
 // ---- UPDATED: Business Hours with Date Object ----
 function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {
   const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday

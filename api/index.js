@@ -1,5 +1,6 @@
 const chrono = require('chrono-node');
 const { google } = require('googleapis');
+const sgMail = require('@sendgrid/mail');
 
 const {
   handleCalculateSolarSavings,
@@ -159,11 +160,6 @@ if (name === 'book_solar_consultation') {
 if (name === 'send_solar_info') {
  const result = await handleSendSolarInfo(args);
  return res.json(result);
-}
-
-if (name === 'send_confirmation_email') {
-  const result = await handleSendConfirmationEmail(args);
-  return res.json(result);
 }
 
 if (name === 'send_confirmation_email') {
@@ -1101,10 +1097,8 @@ function parseToUTC(dateTimeString, timezone = 'America/Denver') {
   
   console.log(`[parseToUTC] Chrono parsed as local: ${parsed.toISOString()}`);
   
-  // Create a date object representing the same time but in Mountain Time
-  // We need to manually adjust for Mountain Time offset
-  
   // In July, Mountain Time is MDT (UTC-6)
+  // We need to add 6 hours to convert Mountain Time to UTC
   const mountainOffsetHours = 6; // MDT is UTC-6
   const mountainOffsetMs = mountainOffsetHours * 60 * 60 * 1000;
   
@@ -1127,9 +1121,6 @@ async function authenticateGmail() {
 
   return auth;
 }
-
-// Replace the Gmail imports at the top with:
-const sgMail = require('@sendgrid/mail');
 
 // Replace the entire handleSendConfirmationEmail function with this:
 async function handleSendConfirmationEmail(args) {

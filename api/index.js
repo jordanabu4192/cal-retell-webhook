@@ -640,7 +640,6 @@ if (availableSlots.length > 0) {
     },
     date_checked: date
   };
-}
 
       } else {
         const dayName = dateObj.toLocaleDateString('en-US', { 

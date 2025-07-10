@@ -36,8 +36,107 @@ module.exports = async (req, res) => {
   }
   
   if (req.method === 'GET') {
-    return res.json({ message: 'Cal.com Retell webhook server is running!' });
+  // Booking management interface
+  if (req.url?.includes('/manage-bookings')) {
+    return res.setHeader('Content-Type', 'text/html').send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>Booking Management</title>
+          <style>
+              body { font-family: Arial, sans-serif; margin: 20px; }
+              table { border-collapse: collapse; width: 100%; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f2f2f2; }
+              .edit-btn { background: #007cba; color: white; padding: 5px 10px; border: none; cursor: pointer; }
+              .update-form { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+          </style>
+      </head>
+      <body>
+          <h1>Booking Management</h1>
+          
+          <div class="update-form">
+              <h3>Update Booking Metadata</h3>
+              <input type="text" id="bookingId" placeholder="Booking ID" style="width: 300px; margin: 5px;">
+              <input type="text" id="newPhone" placeholder="New Phone Number" style="width: 200px; margin: 5px;">
+              <input type="text" id="newReason" placeholder="New Reason" style="width: 200px; margin: 5px;">
+              <button onclick="updateBooking()" class="edit-btn">Update Booking</button>
+          </div>
+          
+          <button onclick="loadBookings()" class="edit-btn">Load All Bookings</button>
+          
+          <div id="bookings"></div>
+
+          <script>
+              async function loadBookings() {
+                  try {
+                      const response = await fetch('/api', {
+                          method: 'POST',
+                          headers: {'Content-Type': 'application/json'},
+                          body: JSON.stringify({name: 'get_all_bookings', args: {}})
+                      });
+                      const data = await response.json();
+                      
+                      if (data.success) {
+                          let html = '<table><tr><th>Booking ID</th><th>Patient</th><th>Email</th><th>Phone</th><th>Time</th><th>Reason</th><th>Status</th></tr>';
+                          data.bookings.forEach(booking => {
+                              html += \`<tr>
+                                  <td>\${booking.booking_id}</td>
+                                  <td>\${booking.patient_name}</td>
+                                  <td>\${booking.patient_email}</td>
+                                  <td>\${booking.phone}</td>
+                                  <td>\${booking.appointment_time}</td>
+                                  <td>\${booking.reason}</td>
+                                  <td>\${booking.status}</td>
+                              </tr>\`;
+                          });
+                          html += '</table>';
+                          document.getElementById('bookings').innerHTML = html;
+                      }
+                  } catch (error) {
+                      alert('Error loading bookings: ' + error.message);
+                  }
+              }
+              
+              async function updateBooking() {
+                  const bookingId = document.getElementById('bookingId').value;
+                  const newPhone = document.getElementById('newPhone').value;
+                  const newReason = document.getElementById('newReason').value;
+                  
+                  try {
+                      const response = await fetch('/api', {
+                          method: 'POST',
+                          headers: {'Content-Type': 'application/json'},
+                          body: JSON.stringify({
+                              name: 'update_booking_metadata',
+                              args: {
+                                  booking_uid: bookingId,
+                                  new_phone: newPhone,
+                                  new_reason: newReason
+                              }
+                          })
+                      });
+                      const data = await response.json();
+                      
+                      if (data.success) {
+                          alert('Booking updated successfully! New ID: ' + data.new_booking_id);
+                          loadBookings();
+                      } else {
+                          alert('Error: ' + data.error);
+                      }
+                  } catch (error) {
+                      alert('Error updating booking: ' + error.message);
+                  }
+              }
+          </script>
+      </body>
+      </html>
+    `);
   }
+  
+  // Default GET response
+  return res.json({ message: 'Cal.com Retell webhook server is running!' });
+}
   
 if (req.method === 'POST') {
   try {

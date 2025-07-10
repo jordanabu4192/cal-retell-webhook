@@ -1032,6 +1032,8 @@ async function handleBookAppointment(args, callId = 'unknown') {
         timeZone: 'America/Denver'
       });
 
+console.log('[HubSpot] Creating contact for:', email);
+
       await createOrUpdateContact({
   name,
   email,

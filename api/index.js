@@ -37,7 +37,7 @@ module.exports = async (req, res) => {
   
   if (req.method === 'GET') {
   // Booking management interface
-  if (req.url?.includes('/manage-bookings')) {
+  if (req.url?.includes('/manage-bookings') || req.query?.path === 'manage-bookings') {
     return res.setHeader('Content-Type', 'text/html').send(`
       <!DOCTYPE html>
       <html>

@@ -720,8 +720,6 @@ function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {
   };
 }
 
-// Find your handleBookAppointment function and update the date/time processing part:
-
 async function handleBookAppointment(args, callId = 'unknown') {
   const { 
     name, 

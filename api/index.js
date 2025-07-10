@@ -866,6 +866,111 @@ async function handleBookAppointment(args, callId = 'unknown') {
       console.log('[book_appointment] Using session date:', finalAppointmentDate, 'instead of:', appointment_date);
     } else {
       console.log('[book_appointment] No session found for callId:', callId);
+      
+      // ===== FALLBACK FOR AMBIGUOUS DATES =====
+      const lowerDate = appointment_date.toLowerCase().trim();
+      
+      // Handle day names without session data
+      if (['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].includes(lowerDate)) {
+        const dayMap = {
+          'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
+          'thursday': 4, 'friday': 5, 'saturday': 6
+        };
+        
+        const today = new Date();
+        const targetDay = dayMap[lowerDate];
+        const currentDay = today.getDay();
+        
+        // Calculate days until target (if today is target, get next week's)
+        let daysUntilTarget = (targetDay - currentDay + 7) % 7;
+        if (daysUntilTarget === 0) {
+          daysUntilTarget = 7; // If it's the same day, assume next week
+        }
+        
+        const targetDate = new Date(today);
+        targetDate.setDate(today.getDate() + daysUntilTarget);
+        
+        // Format it the same way check_availability would
+        finalAppointmentDate = targetDate.toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        
+        console.log(`[book_appointment] Fallback: Interpreted "${appointment_date}" as: ${finalAppointmentDate}`);
+      }
+      
+      // Handle "tomorrow"
+      else if (lowerDate === 'tomorrow') {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        finalAppointmentDate = tomorrow.toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        
+        console.log(`[book_appointment] Fallback: Interpreted "tomorrow" as: ${finalAppointmentDate}`);
+      }
+      
+      // Handle "today"
+      else if (lowerDate === 'today') {
+        const today = new Date();
+        
+        finalAppointmentDate = today.toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        
+        console.log(`[book_appointment] Fallback: Interpreted "today" as: ${finalAppointmentDate}`);
+      }
+      
+      // Handle "next [day]" format
+      else if (lowerDate.startsWith('next ')) {
+        const dayName = lowerDate.replace('next ', '');
+        const dayMap = {
+          'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
+          'thursday': 4, 'friday': 5, 'saturday': 6
+        };
+        
+        if (dayMap.hasOwnProperty(dayName)) {
+          const today = new Date();
+          const targetDay = dayMap[dayName];
+          const currentDay = today.getDay();
+          
+          // Always get the next occurrence (minimum 7 days away)
+          let daysUntilTarget = (targetDay - currentDay + 7) % 7;
+          if (daysUntilTarget === 0) {
+            daysUntilTarget = 7;
+          }
+          daysUntilTarget += 7; // Add a week for "next"
+          
+          const targetDate = new Date(today);
+          targetDate.setDate(today.getDate() + daysUntilTarget);
+          
+          finalAppointmentDate = targetDate.toLocaleDateString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric'
+          });
+          
+          console.log(`[book_appointment] Fallback: Interpreted "${appointment_date}" as: ${finalAppointmentDate}`);
+        }
+      }
+    }
+
+    // ===== CRITICAL: PARSE THE DATE AND TIME =====
+    if (start) {
+      // Direct ISO datetime provided
+      appointmentDateTime = start;
+      console.log('[book_appointment] Using ISO start:', appointmentDateTime);
+    } else {
+      // Combine date and time strings and let chrono parse it
+      const combinedDateTime = `${finalAppointmentDate} ${appointment_time}`;
+      appointmentDateTime = parseToUTC(combinedDateTime);
+      console.log('[book_appointment] Parsed with chrono:', combinedDateTime, '→', appointmentDateTime);
     }
 
     const bookingData = {
@@ -947,9 +1052,18 @@ async function handleBookAppointment(args, callId = 'unknown') {
     
   } catch (error) {
     console.error('Book appointment error:', error);
+    
+    // More specific error messages based on the error type
+    if (error.message && error.message.includes('Could not parse date/time')) {
+      return {
+        success: false,
+        error: `I couldn't understand the date "${finalAppointmentDate}" with time "${appointment_time}". Please try a format like "July 8th at 3 PM" or let me check availability first.`
+      };
+    }
+    
     return {
       success: false,
-      error: "I'm having trouble parsing that date and time. Could you try a different format like 'July 8th at 3 PM'?"
+      error: "I'm having trouble booking that appointment. Please try again or call our office directly."
     };
   }
 }

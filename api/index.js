@@ -1031,7 +1031,15 @@ async function handleBookAppointment(args, callId = 'unknown') {
         minute: '2-digit',
         timeZone: 'America/Denver'
       });
-      
+
+      await createOrUpdateContact({
+  name,
+  email,
+  phone,
+  source: "AI Appointment Bot",
+  notes: reason || ''
+});
+
       return {
         success: true,
         booking_id: booking.uid,

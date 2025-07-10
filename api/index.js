@@ -2,6 +2,20 @@ const chrono = require('chrono-node');
 const { google } = require('googleapis');
 const sgMail = require('@sendgrid/mail');
 
+const activeSessions = new Map();
+
+// Helper function to clean up old sessions (optional)
+function cleanupOldSessions() {
+  const oneHourAgo = Date.now() - (60 * 60 * 1000);
+  for (const [callId, session] of activeSessions.entries()) {
+    if (session.timestamp < oneHourAgo) {
+      activeSessions.delete(callId);
+    }
+  }
+}
+
+// Clean up old sessions every 30 minutes
+setInterval(cleanupOldSessions, 30 * 60 * 1000);
 const {
   handleCalculateSolarSavings,
   handleScoreSolarLead,
@@ -103,12 +117,12 @@ if (req.body.name !== undefined && req.body.email !== undefined && req.body.pref
       }
       
       if (name === 'check_availability') {
-  const result = await handleCheckAvailability(args);
+  const result = await handleCheckAvailability(args, req.body.call_id);
   return res.json(result);
 }
 
       if (name === 'book_appointment') {
-  const result = await handleBookAppointment(args);
+  const result = await handleBookAppointment(args, req.body.call_id);
   return res.json(result);
 }
       
@@ -486,7 +500,7 @@ function findBestMatch(bookings, dateStr, timeStr) {
 }
 
 // ---- FIXED: Check Availability using Cal.com Slots API ----
-async function handleCheckAvailability(args) {
+async function handleCheckAvailability(args, callId = 'unknown') {
   const { date, start_time, end_time, timezone = "America/Denver" } = args;
   
   console.log('Checking availability for:', date, start_time, timezone);
@@ -568,48 +582,66 @@ async function handleCheckAvailability(args) {
       
       console.log(`Found ${availableSlots.length} available slots for ${dateString}`);
       
-      if (availableSlots.length > 0) {
-        // Format available times for display
-        const availableTimes = availableSlots.map(slot => {
-          const slotTime = new Date(slot.time);
-          return slotTime.toLocaleString('en-US', {
-            hour: 'numeric',
-            minute: slotTime.getMinutes() === 0 ? undefined : '2-digit',
-            hour12: true,
-            timeZone: 'America/Denver'
-          });
-        });
-        
-        // Create a helpful message with specific available times
-        const dayName = dateObj.toLocaleDateString('en-US', { 
-          weekday: 'long', 
-          month: 'long', 
-          day: 'numeric',
-          timeZone: 'America/Denver'
-        });
-        
-        let message;
-        if (availableSlots.length === 1) {
-          message = `Great! We have 1 available time slot on ${dayName}: ${availableTimes[0]}.`;
-        } else if (availableSlots.length <= 3) {
-          message = `Great! We have ${availableSlots.length} available time slots on ${dayName}: ${availableTimes.join(', ')}.`;
-        } else {
-          // Show first few options
-          const firstThree = availableTimes.slice(0, 3).join(', ');
-          message = `Great! We have ${availableSlots.length} available time slots on ${dayName}. Some options include: ${firstThree} and ${availableSlots.length - 3} more.`;
-        }
-        
-        return {
-          available: true,
-          availability_details: {
-            available: true,
-            message: message,
-            available_slots: availableSlots.length,
-            available_times: availableTimes,
-            business_hours: businessHours.business_hours
-          },
-          date_checked: date
-        };
+      // Find this section in your handleCheckAvailability function and replace it:
+
+if (availableSlots.length > 0) {
+  // Format available times for display
+  const availableTimes = availableSlots.map(slot => {
+    const slotTime = new Date(slot.time);
+    return slotTime.toLocaleString('en-US', {
+      hour: 'numeric',
+      minute: slotTime.getMinutes() === 0 ? undefined : '2-digit',
+      hour12: true,
+      timeZone: 'America/Denver'
+    });
+  });
+  
+  // Store session data for this call
+  const callId = req.body.call_id || 'unknown'; // You'll need to pass this
+  activeSessions.set(callId, {
+    checkedDate: date, // Store the EXACT date format used
+    availableTimes: availableTimes,
+    availableSlots: availableSlots,
+    timestamp: Date.now()
+  });
+  
+  console.log(`[session] Stored data for call ${callId}:`, {
+    checkedDate: date,
+    availableTimesCount: availableTimes.length
+  });
+  
+  // Create a helpful message with specific available times
+  const dayName = dateObj.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    month: 'long', 
+    day: 'numeric',
+    timeZone: 'America/Denver'
+  });
+  
+  let message;
+  if (availableSlots.length === 1) {
+    message = `Great! We have 1 available time slot on ${dayName}: ${availableTimes[0]}.`;
+  } else if (availableSlots.length <= 3) {
+    message = `Great! We have ${availableSlots.length} available time slots on ${dayName}: ${availableTimes.join(', ')}.`;
+  } else {
+    // Show first few options
+    const firstThree = availableTimes.slice(0, 3).join(', ');
+    message = `Great! We have ${availableSlots.length} available time slots on ${dayName}. Some options include: ${firstThree} and ${availableSlots.length - 3} more.`;
+  }
+  
+  return {
+    available: true,
+    availability_details: {
+      available: true,
+      message: message,
+      available_slots: availableSlots.length,
+      available_times: availableTimes,
+      business_hours: businessHours.business_hours
+    },
+    date_checked: date
+  };
+}
+
       } else {
         const dayName = dateObj.toLocaleDateString('en-US', { 
           weekday: 'long', 
@@ -689,8 +721,9 @@ function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {
   };
 }
 
-// ---- UPDATED: Book Appointment with Chrono ----
-async function handleBookAppointment(args) {
+// Find your handleBookAppointment function and update the date/time processing part:
+
+async function handleBookAppointment(args, callId = 'unknown') {
   const { 
     name, 
     email, 
@@ -703,6 +736,7 @@ async function handleBookAppointment(args) {
   } = args;
 
   console.log('[book_appointment] Booking appointment for:', name, email);
+  console.log('[book_appointment] Call ID:', callId);
 
   // Validate required fields
   if (!name || !email || (!start && (!appointment_date || !appointment_time))) {
@@ -713,19 +747,28 @@ async function handleBookAppointment(args) {
   }
 
   let appointmentDateTime;
+  let finalAppointmentDate = appointment_date;
   
   try {
+    // Check if we have session data for this call
+    const session = activeSessions.get(callId);
+    if (session && session.checkedDate) {
+      finalAppointmentDate = session.checkedDate; // Use the EXACT same date format
+      console.log('[book_appointment] Using session date:', finalAppointmentDate, 'instead of:', appointment_date);
+    }
+
     if (start) {
       // Direct ISO datetime provided
       appointmentDateTime = start;
       console.log('[book_appointment] Using ISO start:', appointmentDateTime);
     } else {
       // Combine date and time strings and let chrono parse it
-      const combinedDateTime = `${appointment_date} ${appointment_time}`;
+      const combinedDateTime = `${finalAppointmentDate} ${appointment_time}`;
       appointmentDateTime = parseToUTC(combinedDateTime);
       console.log('[book_appointment] Parsed with chrono:', combinedDateTime, '→', appointmentDateTime);
     }
 
+    // Rest of your booking logic stays the same...
     const bookingData = {
       start: appointmentDateTime,
       eventTypeId: 2694982,
@@ -740,6 +783,17 @@ async function handleBookAppointment(args) {
         notes: notes || ''
       }
     };
+
+    // Continue with the rest of your existing booking code...
+    // (Keep everything else the same)
+  } catch (error) {
+    console.error('Book appointment error:', error);
+    return {
+      success: false,
+      error: "I'm having trouble parsing that date and time. Could you try a different format like 'July 8th at 3 PM'?"
+    };
+  }
+}
 
     const response = await fetch('https://api.cal.com/v2/bookings', {
       method: 'POST',

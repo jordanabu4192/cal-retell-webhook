@@ -765,7 +765,6 @@ async function handleBookAppointment(args, callId = 'unknown') {
       console.log('[book_appointment] Parsed with chrono:', combinedDateTime, '→', appointmentDateTime);
     }
 
-    // Rest of your booking logic stays the same...
     const bookingData = {
       start: appointmentDateTime,
       eventTypeId: 2694982,
@@ -780,17 +779,6 @@ async function handleBookAppointment(args, callId = 'unknown') {
         notes: notes || ''
       }
     };
-
-    // Continue with the rest of your existing booking code...
-    // (Keep everything else the same)
-  } catch (error) {
-    console.error('Book appointment error:', error);
-    return {
-      success: false,
-      error: "I'm having trouble parsing that date and time. Could you try a different format like 'July 8th at 3 PM'?"
-    };
-  }
-}
 
     const response = await fetch('https://api.cal.com/v2/bookings', {
       method: 'POST',
@@ -863,7 +851,6 @@ async function handleBookAppointment(args, callId = 'unknown') {
   }
 }
 
-// ---- UNCHANGED: Cancel Booking ----
 async function handleCancelBooking(args) {
   const { booking_uid, cancellation_reason = "Cancelled by patient" } = args;
   

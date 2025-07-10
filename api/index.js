@@ -1660,3 +1660,38 @@ async function handleUpdateBookingMetadata(args) {
     return { success: false, error: error.message };
   }
 }
+
+async function createOrUpdateContact({ name, email, phone, source = "Voice AI Agent", notes = "" }) {
+  try {
+    const response = await fetch('https://api.hubapi.com/crm/v3/objects/contacts', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.HUBSPOT_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        properties: {
+          email: email,
+          firstname: name,
+          phone: phone,
+          lifecyclestage: "lead",
+          source: source,
+          notes: notes
+        }
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error('HubSpot Error:', result);
+      return { success: false, error: result };
+    }
+
+    console.log('[HubSpot] Contact created/updated:', result.id);
+    return { success: true, contactId: result.id };
+  } catch (error) {
+    console.error('[HubSpot] API call failed:', error);
+    return { success: false, error: error.message };
+  }
+}

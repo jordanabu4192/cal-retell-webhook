@@ -176,6 +176,16 @@ if (name === 'send_solar_info') {
  return res.json(result);
 }
 
+if (name === 'get_all_bookings') {
+  const result = await handleGetAllBookings(args);
+  return res.json(result);
+}
+
+if (name === 'update_booking_metadata') {
+  const result = await handleUpdateBookingMetadata(args);
+  return res.json(result);
+}
+
 if (name === 'send_confirmation_email') {
   const result = await handleSendConfirmationEmail(args);
   return res.json(result);
@@ -1320,4 +1330,126 @@ ${business_name}
   }
 }
 
-// Remove the Gmail authentication function entirely - no longer needed
+async function handleGetAllBookings(args) {
+  try {
+    const response = await fetch('https://api.cal.com/v2/bookings', {
+      headers: {
+        'Authorization': `Bearer ${process.env.CAL_API_KEY}`,
+        'Content-Type': 'application/json',
+        'cal-api-version': '2024-08-13'
+      }
+    });
+    
+    const result = await response.json();
+    
+    // Format the data to show metadata clearly
+    const formattedBookings = result.data?.map(booking => ({
+      booking_id: booking.uid,
+      patient_name: booking.attendees[0]?.name,
+      patient_email: booking.attendees[0]?.email,
+      appointment_time: new Date(booking.start).toLocaleString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: 'America/Denver'
+      }),
+      phone: booking.metadata?.phone || 'Not provided',
+      reason: booking.metadata?.reason || 'Not specified',
+      status: booking.status
+    })) || [];
+    
+    return {
+      success: true,
+      bookings: formattedBookings,
+      total: formattedBookings.length
+    };
+  } catch (error) {
+    console.error('Get bookings error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+async function handleUpdateBookingMetadata(args) {
+  const { booking_uid, new_phone, new_reason, new_notes } = args;
+  
+  try {
+    // First, get the existing booking details
+    const getResponse = await fetch(`https://api.cal.com/v2/bookings/${booking_uid}`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.CAL_API_KEY}`,
+        'Content-Type': 'application/json',
+        'cal-api-version': '2024-08-13'
+      }
+    });
+    
+    if (!getResponse.ok) {
+      return { success: false, error: 'Could not find booking' };
+    }
+    
+    const existingBooking = await getResponse.json();
+    const booking = existingBooking.data;
+    
+    // Cancel the old booking
+    await fetch(`https://api.cal.com/v2/bookings/${booking_uid}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.CAL_API_KEY}`,
+        'Content-Type': 'application/json',
+        'cal-api-version': '2024-08-13'
+      },
+      body: JSON.stringify({
+        cancellationReason: "Updated booking information"
+      })
+    });
+    
+    // Create new booking with updated metadata
+    const newBookingData = {
+      start: booking.start,
+      eventTypeId: booking.eventTypeId,
+      attendee: {
+        name: booking.attendees[0].name,
+        email: booking.attendees[0].email,
+        timeZone: "America/Denver"
+      },
+      metadata: {
+        phone: new_phone || booking.metadata?.phone || '',
+        reason: new_reason || booking.metadata?.reason || 'appointment',
+        notes: new_notes || booking.metadata?.notes || ''
+      }
+    };
+    
+    const createResponse = await fetch('https://api.cal.com/v2/bookings', {
+      method: 'POST',
+      headers: {
+        'cal-api-version': '2024-08-13',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.CAL_API_KEY}`
+      },
+      body: JSON.stringify(newBookingData)
+    });
+    
+    const result = await createResponse.json();
+    
+    if (result.status === 'success') {
+      return {
+        success: true,
+        message: `Booking updated successfully. New booking ID: ${result.data.uid}`,
+        old_booking_id: booking_uid,
+        new_booking_id: result.data.uid,
+        updated_metadata: newBookingData.metadata
+      };
+    } else {
+      return {
+        success: false,
+        error: "Failed to create updated booking"
+      };
+    }
+    
+  } catch (error) {
+    console.error('Update booking error:', error);
+    return { success: false, error: error.message };
+  }
+}

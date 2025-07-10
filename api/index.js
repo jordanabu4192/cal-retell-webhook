@@ -195,13 +195,13 @@ if (!req.body.name && req.body.homeowner !== undefined) {
 
 if (!req.body.name && req.body.date !== undefined) {
   // This is a check_availability call
-  const result = await handleCheckAvailability(req.body);
+  const result = await handleCheckAvailability(req.body, req.body.call_id || 'unknown');
   return res.json(result);
 }
 
 if (req.body.name !== undefined && req.body.email !== undefined && req.body.preferred_time !== undefined) {
   // This is a book_solar_consultation call
-  const result = await handleBookSolarConsultation(req.body);
+  const result = await handleBookSolarConsultation(req.body, req.body.call_id || 'unknown');
   return res.json(result);
 }
 
@@ -706,7 +706,7 @@ if (availableSlots.length > 0) {
   });
   
   // Store session data for this call
-  const callId = req.body.call_id || 'unknown'; // You'll need to pass this
+  // FIX: Use the callId parameter that's passed to the function, not req.body.call_id
   activeSessions.set(callId, {
     checkedDate: date, // Store the EXACT date format used
     availableTimes: availableTimes,
@@ -843,6 +843,7 @@ async function handleBookAppointment(args, callId = 'unknown') {
 
   console.log('[book_appointment] Booking appointment for:', name, email);
   console.log('[book_appointment] Call ID:', callId);
+  console.log('[book_appointment] Active sessions:', Array.from(activeSessions.keys()));
 
   // Validate required fields
   if (!name || !email || (!start && (!appointment_date || !appointment_time))) {
@@ -858,20 +859,13 @@ async function handleBookAppointment(args, callId = 'unknown') {
   try {
     // Check if we have session data for this call
     const session = activeSessions.get(callId);
+    console.log('[book_appointment] Session data:', session);
+    
     if (session && session.checkedDate) {
       finalAppointmentDate = session.checkedDate; // Use the EXACT same date format
       console.log('[book_appointment] Using session date:', finalAppointmentDate, 'instead of:', appointment_date);
-    }
-
-    if (start) {
-      // Direct ISO datetime provided
-      appointmentDateTime = start;
-      console.log('[book_appointment] Using ISO start:', appointmentDateTime);
     } else {
-      // Combine date and time strings and let chrono parse it
-      const combinedDateTime = `${finalAppointmentDate} ${appointment_time}`;
-      appointmentDateTime = parseToUTC(combinedDateTime);
-      console.log('[book_appointment] Parsed with chrono:', combinedDateTime, '→', appointmentDateTime);
+      console.log('[book_appointment] No session found for callId:', callId);
     }
 
     const bookingData = {

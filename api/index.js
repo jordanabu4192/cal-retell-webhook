@@ -143,7 +143,7 @@ if (req.method === 'POST') {
     console.log('=== WEBHOOK DEBUG ===');
     console.log('Full request body:', JSON.stringify(req.body, null, 2));
     console.log('Function name:', req.body.name);
-    console.log('Function args:', req.body.args);
+    console.log('Function args:', JSON.stringify(req.body.arguments, null, 2));
     console.log('==================');
     console.log('Call ID:', req.body.call_id);
 
@@ -171,7 +171,7 @@ if (req.body.event) {
           return res.json({ success: true, message: 'System event received' });
       }
     }
-      const { name, args } = req.body;
+      const { name, arguments: args } = req.body;
       
 // Handle direct parameter format from Retell
 if (!req.body.name && req.body.monthly_electric_bill !== undefined) {

@@ -431,7 +431,7 @@ async function handleRescheduleBooking(args) {
     };
   }
 }
-// ---- UPDATED: Find Booking with Chrono ----
+
 async function handleFindBookingByDate(args) {
   const { email, appointment_date, appointment_time } = args;
   
@@ -455,8 +455,8 @@ async function handleFindBookingByDate(args) {
   }
   
   try {
-    // First, get all bookings for this email
-    const response = await fetch(`https://api.cal.com/v2/bookings?email=${encodeURIComponent(email)}`, {
+    // THIS IS THE LINE THAT WAS CHANGED: Added &status=accepted to the URL
+    const response = await fetch(`https://api.cal.com/v2/bookings?email=${encodeURIComponent(email)}&status=accepted`, {
       method: 'GET',
       headers: {
         'cal-api-version': '2024-08-13',
@@ -476,13 +476,10 @@ async function handleFindBookingByDate(args) {
     const result = await response.json();
     const bookings = result.data || [];
     
-    console.log('Found bookings:', bookings.length);
-    console.log('INSPECTING FIRST 3 BOOKINGS:', JSON.stringify(bookings.slice(0, 3), null, 2));
-
-    // Filter for active bookings only
-    const activeBookings = bookings.filter(booking => 
-      booking.status === 'accepted' && new Date(booking.start) > new Date()
-    );
+    console.log('Found active bookings:', bookings.length);
+    
+    // Filter for future bookings only (status is already handled by the API)
+    const activeBookings = bookings.filter(booking => new Date(booking.start) > new Date());
     
     console.log('Active future bookings:', activeBookings.length);
     
@@ -490,7 +487,7 @@ async function handleFindBookingByDate(args) {
       return {
         success: false,
         error: "No active bookings found",
-        message: "I couldn't find any upcoming appointments for that email address. Could you double-check the email or provide your booking confirmation number?"
+        message: "I couldn't find any upcoming appointments for that email address. Could you double-check the email or the date and time of your appointment?"
       };
     }
     
@@ -505,7 +502,7 @@ async function handleFindBookingByDate(args) {
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-        timeZone: timezone
+        timeZone: 'America/Denver'
       });
       
       return {
@@ -528,7 +525,7 @@ async function handleFindBookingByDate(args) {
           day: 'numeric',
           hour: 'numeric',
           minute: '2-digit',
-          timeZone: timezone
+          timeZone: 'America/Denver'
         });
       }).join(', ');
       
@@ -544,7 +541,7 @@ async function handleFindBookingByDate(args) {
             day: 'numeric',
             hour: 'numeric',
             minute: '2-digit',
-            timeZone: timezone
+            timeZone: 'America/Denver'
           })
         }))
       };
@@ -561,7 +558,6 @@ async function handleFindBookingByDate(args) {
   }
 }
 
-// ---- UPDATED: Best Match with Chrono ----
 // ---- UPDATED: Best Match with Chrono and Enhanced Logging ----
 function findBestMatch(bookings, dateStr, timeStr) {
   console.log('Searching for:', dateStr, timeStr);

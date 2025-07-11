@@ -432,68 +432,51 @@ async function handleRescheduleBooking(args) {
   }
 }
 
+// ---- FINAL VERSION: Find Booking with Correct Server-Side Filtering ----
 async function handleFindBookingByDate(args) {
   const { email, appointment_date, appointment_time } = args;
-  
+
   console.log('Finding booking for:', email, appointment_date, appointment_time);
-  
-  // Validate required fields
-  if (!email) {
-    return {
-      success: false,
-      error: "Email is required",
-      message: "I need your email address to find your appointment."
-    };
+
+  if (!email || !appointment_date || !appointment_time) {
+    return { success: false, error: "Email, date, and time are required." };
   }
-  
-  if (!appointment_date || !appointment_time) {
-    return {
-      success: false,
-      error: "Date and time are required",
-      message: "I need both the date and time of your appointment to find it."
-    };
-  }
-  
+
   try {
-    // THIS IS THE LINE THAT WAS CHANGED: Added &status=accepted to the URL
-    const response = await fetch(`https://api.cal.com/v2/bookings?email=${encodeURIComponent(email)}&status=accepted`, {
+    // This URL uses the correct 'status=upcoming' filter provided by Cal.com's documentation.
+    const url = `https://api.cal.com/v2/bookings?email=${encodeURIComponent(email)}&status=upcoming`;
+    console.log(`Fetching from Cal.com with URL: ${url}`);
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'cal-api-version': '2024-08-13',
         'Authorization': `Bearer ${process.env.CAL_API_KEY}`
       }
     });
-    
+
     if (!response.ok) {
-      console.error('Cal.com API error:', response.status);
-      return {
-        success: false,
-        error: `Cal.com API error: ${response.status}`,
-        message: "I'm having trouble accessing the booking system. Please try again in a moment."
-      };
+      const errorText = await response.text();
+      console.error('Cal.com API error:', response.status, errorText);
+      throw new Error(`Cal.com API error: ${response.status}`);
     }
-    
+
     const result = await response.json();
-    const bookings = result.data || [];
-    
-    console.log('Found active bookings:', bookings.length);
-    
-    // Filter for future bookings only (status is already handled by the API)
-    const activeBookings = bookings.filter(booking => new Date(booking.start) > new Date());
-    
-    console.log('Active future bookings:', activeBookings.length);
-    
-    if (activeBookings.length === 0) {
+    const upcomingBookings = result.data || [];
+
+    console.log(`Found ${upcomingBookings.length} upcoming bookings.`);
+
+    if (upcomingBookings.length === 0) {
       return {
         success: false,
-        error: "No active bookings found",
-        message: "I couldn't find any upcoming appointments for that email address. Could you double-check the email or the date and time of your appointment?"
+        error: "No upcoming bookings found",
+        message: "I couldn't find any upcoming appointments for that email address."
       };
     }
-    
-    // Try to match the date and time using chrono
-    const matchedBooking = findBestMatch(activeBookings, appointment_date, appointment_time);
-    
+
+    // Now we find the best match from the correctly filtered list.
+    const matchedBooking = findBestMatch(upcomingBookings, appointment_date, appointment_time);
+
     if (matchedBooking) {
       const bookingDateTime = new Date(matchedBooking.start).toLocaleString('en-US', {
         weekday: 'long',
@@ -504,56 +487,24 @@ async function handleFindBookingByDate(args) {
         minute: '2-digit',
         timeZone: 'America/Denver'
       });
-      
       return {
         success: true,
-        message: `Found your appointment! It's scheduled for ${bookingDateTime}.`,
-        booking_uid: matchedBooking.uid,
-        booking_details: bookingDateTime,
-        search_criteria: {
-          email: email,
-          requested_date: appointment_date,
-          requested_time: appointment_time
-        }
+        message: `Found your appointment for ${bookingDateTime}.`,
+        booking_uid: matchedBooking.uid
       };
     } else {
-      // If no exact match, provide helpful info about available appointments
-      const availableAppointments = activeBookings.map(booking => {
-        return new Date(booking.start).toLocaleString('en-US', {
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          timeZone: 'America/Denver'
-        });
-      }).join(', ');
-      
-      return {
+       return {
         success: false,
-        error: "No matching appointment found",
-        message: `I couldn't find an appointment matching ${appointment_date} at ${appointment_time}. I found these upcoming appointments for ${email}: ${availableAppointments}. Could you clarify which one you meant?`,
-        available_appointments: activeBookings.map(booking => ({
-          booking_uid: booking.uid,
-          datetime: new Date(booking.start).toLocaleString('en-US', {
-            weekday: 'long',
-            month: 'long', 
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            timeZone: 'America/Denver'
-          })
-        }))
+        error: "No matching appointment found for that specific date and time.",
+        message: `I see you have an upcoming appointment, but not for the date and time you mentioned. Please check and try again.`
       };
     }
-    
   } catch (error) {
     console.error('Find booking error:', error);
-    
     return {
       success: false,
       error: error.message,
-      message: "I'm having trouble finding your appointment. Please try again or contact our office directly."
+      message: "I'm having trouble with the booking system right now. Please try again in a moment."
     };
   }
 }

@@ -139,12 +139,15 @@ module.exports = async (req, res) => {
 }
   
 if (req.method === 'POST') {
-  try {
-    console.log('▶️ RECEIVED WEBHOOK:', JSON.stringify(req.body, null, 2));
-    const name = req.body.name;
-    const args = req.body.arguments || req.body.args;
-    console.log('▶️ PARSED INPUTS → name:', name, ', args:', JSON.stringify(args, null, 2));
-    console.log('Call ID:', req.body.call_id);
+    try {
+        // ▶️  Log entire incoming payload
+        console.log('▶️ RECEIVED WEBHOOK:', JSON.stringify(req.body, null, 2));
+        console.log('Call ID:', req.body.call_id);
+
+        // ▶️  Parse the tool call inputs
+        const name = req.body.name;
+        const args = req.body.arguments || req.body.args;
+        console.log('▶️ PARSED INPUTS → name:', name, ', args:', JSON.stringify(args, null, 2));
 
 if (req.body.event) {
       const { event, call_id, data } = req.body;

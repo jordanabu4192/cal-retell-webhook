@@ -432,80 +432,42 @@ async function handleRescheduleBooking(args) {
   }
 }
 
-// ---- FINAL VERSION: Find Booking with Correct Server-Side Filtering ----
-async function handleFindBookingByDate(args) {
-  const { email, appointment_date, appointment_time } = args;
+// ---- FINAL, MOST ROBUST VERSION ----
+function findBestMatch(bookings, dateStr, timeStr) {
+  console.log('Searching for appointment on', dateStr, 'at', timeStr);
 
-  console.log('Finding booking for:', email, appointment_date, appointment_time);
-
-  if (!email || !appointment_date || !appointment_time) {
-    return { success: false, error: "Email, date, and time are required." };
+  // A simple function to get just the date part (YYYY-MM-DD) in a specific timezone
+  function getLocalDate(date, timeZone) {
+    return new Date(date).toLocaleDateString('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
   }
 
   try {
-    // This URL uses the correct 'status=upcoming' filter provided by Cal.com's documentation.
-    const url = `https://api.cal.com/v2/bookings?email=${encodeURIComponent(email)}&status=upcoming`;
-    console.log(`Fetching from Cal.com with URL: ${url}`);
+    // We only need to parse the user's input string once.
+    const searchDate = chrono.parseDate(`${dateStr} ${timeStr}`);
+    if (!searchDate) {
+      console.error("Chrono could not parse the user's date/time input.");
+      return null;
+    }
+    const targetLocalDate = getLocalDate(searchDate, 'America/Denver');
+    console.log(`Targeting local date (YYYY-MM-DD): ${targetLocalDate}`);
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'cal-api-version': '2024-08-13',
-        'Authorization': `Bearer ${process.env.CAL_API_KEY}`
+    for (const booking of bookings) {
+      const bookingLocalDate = getLocalDate(booking.start, 'America/Denver');
+      console.log(`Comparing with Booking UID ${booking.uid} on local date: ${bookingLocalDate}`);
+
+      // If the dates match, we have found the correct appointment.
+      if (bookingLocalDate === targetLocalDate) {
+        console.log(`✅ Found matching booking: ${booking.uid}`);
+        return booking;
       }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Cal.com API error:', response.status, errorText);
-      throw new Error(`Cal.com API error: ${response.status}`);
     }
 
-    const result = await response.json();
-    const upcomingBookings = result.data || [];
+    console.log('No booking found with a matching local date.');
+    return null;
 
-    console.log(`Found ${upcomingBookings.length} upcoming bookings.`);
-
-    if (upcomingBookings.length === 0) {
-      return {
-        success: false,
-        error: "No upcoming bookings found",
-        message: "I couldn't find any upcoming appointments for that email address."
-      };
-    }
-
-    // Now we find the best match from the correctly filtered list.
-    const matchedBooking = findBestMatch(upcomingBookings, appointment_date, appointment_time);
-
-    if (matchedBooking) {
-      const bookingDateTime = new Date(matchedBooking.start).toLocaleString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: 'America/Denver'
-      });
-      return {
-        success: true,
-        message: `Found your appointment for ${bookingDateTime}.`,
-        booking_uid: matchedBooking.uid
-      };
-    } else {
-       return {
-        success: false,
-        error: "No matching appointment found for that specific date and time.",
-        message: `I see you have an upcoming appointment, but not for the date and time you mentioned. Please check and try again.`
-      };
-    }
   } catch (error) {
-    console.error('Find booking error:', error);
-    return {
-      success: false,
-      error: error.message,
-      message: "I'm having trouble with the booking system right now. Please try again in a moment."
-    };
+    console.error('Error in findBestMatch:', error);
+    return null;
   }
 }
 

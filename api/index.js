@@ -477,7 +477,8 @@ async function handleFindBookingByDate(args) {
     const bookings = result.data || [];
     
     console.log('Found bookings:', bookings.length);
-    
+    console.log('INSPECTING FIRST 3 BOOKINGS:', JSON.stringify(bookings.slice(0, 3), null, 2));
+
     // Filter for active bookings only
     const activeBookings = bookings.filter(booking => 
       booking.status === 'accepted' && new Date(booking.start) > new Date()

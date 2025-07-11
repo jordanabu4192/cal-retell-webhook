@@ -173,8 +173,6 @@ if (req.body.event) {
           return res.json({ success: true, message: 'System event received' });
       }
     }
-      const name = req.body.name;
-      const args = req.body.arguments || req.body.args;
       
 // Handle direct parameter format from Retell
 if (!req.body.name && req.body.monthly_electric_bill !== undefined) {

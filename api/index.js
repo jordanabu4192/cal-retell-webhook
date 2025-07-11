@@ -563,52 +563,45 @@ async function handleFindBookingByDate(args) {
 }
 
 // ---- UPDATED: Best Match with Chrono ----
+// ---- UPDATED: Best Match with Chrono and Enhanced Logging ----
 function findBestMatch(bookings, dateStr, timeStr) {
   console.log('Searching for:', dateStr, timeStr);
   
   try {
     // Use chrono to parse the search terms
-    const searchDateTime = chrono.parseDate(`${dateStr} ${timeStr}`, new Date(), { timeZone: timezone });
+    const searchDateTime = chrono.parseDate(`${dateStr} ${timeStr}`, new Date(), { timeZone: 'America/Denver' });
     
     if (!searchDateTime) {
-      console.log('Could not parse search date/time with chrono');
-      return bookings.length > 0 ? bookings[0] : null;
+      console.log('Could not parse search date/time with chrono.');
+      // If parsing fails, we can't find a match
+      return null;
     }
     
-    console.log('Parsed search datetime:', searchDateTime);
-    
-    // Find the booking that's closest to the search time
-    let bestMatch = null;
-    let smallestDiff = Infinity;
-    
+    // Log the parsed time for debugging
+    console.log(`[findBestMatch] Parsed search datetime (UTC): ${searchDateTime.toISOString()}`);
+
     for (const booking of bookings) {
       const bookingDate = new Date(booking.start);
+      
+      // Log the booking's time for comparison
+      console.log(`[findBestMatch] Checking Booking UID ${booking.uid} with start time (UTC): ${bookingDate.toISOString()}`);
+      
       const timeDiff = Math.abs(bookingDate.getTime() - searchDateTime.getTime());
-      
-      console.log('Checking booking:', {
-        uid: booking.uid,
-        start: booking.start,
-        timeDiff: timeDiff / (1000 * 60) // minutes
-      });
-      
-      // If within 2 hours (accounting for timezone differences)
-      if (timeDiff < 2 * 60 * 60 * 1000 && timeDiff < smallestDiff) {
-        bestMatch = booking;
-        smallestDiff = timeDiff;
+      console.log(`[findBestMatch]   - Time difference (minutes): ${timeDiff / (1000 * 60)}`);
+
+      // If the time difference is less than 1 minute, we have a clear match.
+      if (timeDiff < 60 * 1000) {
+        console.log(`[findBestMatch] ✅ Found a direct match for UID: ${booking.uid}`);
+        return booking;
       }
     }
     
-    if (bestMatch) {
-      console.log('Found best match:', bestMatch.uid, 'with diff:', smallestDiff / (1000 * 60), 'minutes');
-      return bestMatch;
-    }
-    
-    console.log('No close match found, returning first active booking');
-    return bookings.length > 0 ? bookings[0] : null;
+    console.log('[findBestMatch] No booking found within the 1-minute match threshold.');
+    return null;
     
   } catch (error) {
     console.error('Error in findBestMatch:', error);
-    return bookings.length > 0 ? bookings[0] : null;
+    return null;
   }
 }
 

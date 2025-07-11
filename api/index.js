@@ -302,8 +302,8 @@ if (name === 'send_confirmation_email') {
   return res.status(405).json({ error: "Method not allowed" });
 };
 
-function parseToMountainTime(dateTimeString) {
-  const parsed = chrono.parseDate(dateTimeString, new Date(), { timezone: 'America/Denver' });
+function parseToMountainTime(dateTimeString, timezone = 'America/Denver') {
+  const parsed = chrono.parseDate(dateTimeString, new Date(), { timezone: timezone });
   
   if (!parsed) {
     throw new Error(`Could not parse date/time: ${dateTimeString}`);
@@ -391,7 +391,7 @@ async function handleRescheduleBooking(args) {
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-        timeZone: 'America/Denver'
+        timeZone: timezone
       });
       
       return {
@@ -503,7 +503,7 @@ async function handleFindBookingByDate(args) {
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-        timeZone: 'America/Denver'
+        timeZone: timezone
       });
       
       return {
@@ -526,7 +526,7 @@ async function handleFindBookingByDate(args) {
           day: 'numeric',
           hour: 'numeric',
           minute: '2-digit',
-          timeZone: 'America/Denver'
+          timeZone: timezone
         });
       }).join(', ');
       
@@ -542,7 +542,7 @@ async function handleFindBookingByDate(args) {
             day: 'numeric',
             hour: 'numeric',
             minute: '2-digit',
-            timeZone: 'America/Denver'
+            timeZone: timezone
           })
         }))
       };
@@ -565,7 +565,7 @@ function findBestMatch(bookings, dateStr, timeStr) {
   
   try {
     // Use chrono to parse the search terms
-    const searchDateTime = chrono.parseDate(`${dateStr} ${timeStr}`, new Date(), { timezone: 'America/Denver' });
+    const searchDateTime = chrono.parseDate(`${dateStr} ${timeStr}`, new Date(), { timeZone: timezone });
     
     if (!searchDateTime) {
       console.log('Could not parse search date/time with chrono');
@@ -609,16 +609,16 @@ function findBestMatch(bookings, dateStr, timeStr) {
   }
 }
 
-// ---- FIXED: Check Availability using Cal.com Slots API ----
 async function handleCheckAvailability(args, callId = 'unknown') {
-  const { date, start_time, end_time, timezone = "America/Denver" } = args;
+  const { date, start_time, end_time, timezone = args.business_timezone || "America/Denver" } = args;
   
   console.log('[check_availability] Called with:', {
     args: args,
     callId: callId,
-    date: args.date
+    date: args.date,
+    timezone: timezone  // Add this to see which timezone is being used
   });
-  
+
   try {
     // Parse the date with chrono
     const dateObj = chrono.parseDate(date, new Date(), { timezone });
@@ -706,12 +706,12 @@ if (availableSlots.length > 0) {
       hour: 'numeric',
       minute: slotTime.getMinutes() === 0 ? undefined : '2-digit',
       hour12: true,
-      timeZone: 'America/Denver'
+      timeZone: timezone
     });
   });
   
   // Parse the date string to get a consistent date
-  const parsedDateObj = chrono.parseDate(date, new Date(), { timezone: 'America/Denver' });
+  const parsedDateObj = chrono.parseDate(date, new Date(), { timeZone: timezone });
   const normalizedDateString = parsedDateObj.toISOString().split('T')[0]; // YYYY-MM-DD format
   
   // Store session data for this call
@@ -736,7 +736,7 @@ if (availableSlots.length > 0) {
     weekday: 'long', 
     month: 'long', 
     day: 'numeric',
-    timeZone: 'America/Denver'
+    timeZone: timezone
   });
   
   let message;
@@ -768,7 +768,7 @@ return {
           weekday: 'long', 
           month: 'long', 
           day: 'numeric',
-          timeZone: 'America/Denver'
+          timeZone: timezone
         });
         
         return {
@@ -851,16 +851,18 @@ async function handleBookAppointment(args, callId = 'unknown') {
     appointment_time, 
     reason,
     notes,
-    start 
+    start,
+    timezone = args.business_timezone || "America/Denver"
   } = args;
-
+  
   console.log('[book_appointment] Called with:', {
     args: args,
     callId: callId,
     appointment_date: args.appointment_date,
     appointment_time: args.appointment_time,
     name: name,
-    email: email
+    email: email,
+    timezone: timezone  // Added to see which timezone is being used
   });
   console.log('[book_appointment] Call ID:', callId);
   console.log('[book_appointment] Active sessions:', Array.from(activeSessions.keys()));
@@ -884,7 +886,7 @@ async function handleBookAppointment(args, callId = 'unknown') {
   if (session && session.parsedDate) {
     // Parse the incoming appointment date to compare with stored session
     const incomingDateStr = `${appointment_date} ${appointment_time}`;
-    const incomingParsed = chrono.parseDate(incomingDateStr, new Date(), { timezone: 'America/Denver' });
+    const incomingParsed = chrono.parseDate(incomingDateStr, new Date(), { timeZone: timezone });
     const incomingDateNormalized = incomingParsed.toISOString().split('T')[0]; // YYYY-MM-DD
     
     console.log('[book_appointment] Date comparison:', {
@@ -1009,7 +1011,7 @@ async function handleBookAppointment(args, callId = 'unknown') {
     } else {
       // Combine date and time strings and let chrono parse it
       const combinedDateTime = `${finalAppointmentDate} ${appointment_time}`;
-      appointmentDateTime = parseToUTC(combinedDateTime);
+      appointmentDateTime = parseToUTC(combinedDateTime, timezone);
       console.log('[book_appointment] Parsed with chrono:', combinedDateTime, '→', appointmentDateTime);
     }
 
@@ -1069,7 +1071,7 @@ async function handleBookAppointment(args, callId = 'unknown') {
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-        timeZone: 'America/Denver'
+        timeZone: timezone
       });
 
 console.log('[HubSpot] Creating contact for:', email);
@@ -1263,7 +1265,7 @@ async function handleTriggerReminders(args) {
       console.log('Calling phone:', phone);
       
       // Calculate time-of-day greeting
-      const nowInSF = new Date().toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Denver' });
+      const nowInSF = new Date().toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: timezone });
       const currentHourSF = parseInt(nowInSF.split(':')[0]);
       
       let timeOfDayGreeting;
@@ -1278,14 +1280,14 @@ async function handleTriggerReminders(args) {
       // Get appointment day of week
       const appointmentDayOfWeek = new Date(appointment.start).toLocaleDateString('en-US', { 
         weekday: 'long', 
-        timeZone: 'America/Denver' 
+        timeZone: timezone 
       });
       
       const appointmentStart = new Date(appointment.start);
       const appointmentHour = parseInt(appointmentStart.toLocaleTimeString('en-US', {
         hour: 'numeric',
         hourCycle: 'h23',
-        timeZone: 'America/Denver'
+        timeZone: timezone
       }).split(':')[0]);
 
       let appointmentTimeOfDay;
@@ -1316,13 +1318,13 @@ async function handleTriggerReminders(args) {
             appointment_date: new Date(appointment.start).toLocaleDateString('en-US', { 
               month: 'long', 
               day: 'numeric',
-              timeZone: 'America/Denver' 
+              timeZone: timezone 
             }), // Formatted for AI prompt
             appointment_day_of_week: appointmentDayOfWeek, // New variable
             appointment_time: new Date(appointment.start).toLocaleTimeString('en-US', {
               hour: 'numeric',
               minute: '2-digit',
-              timeZone: 'America/Denver'
+              timeZone: timezone
             }),
             booking_uid: appointment.uid,
             current_date: new Date().toLocaleDateString('en-US', {
@@ -1330,7 +1332,7 @@ async function handleTriggerReminders(args) {
               year: 'numeric', 
               month: 'long',
               day: 'numeric',
-              timeZone: 'America/Denver'
+              timeZone: timezone
             }),
             time_of_day_greeting: timeOfDayGreeting // NEW: Pass the greeting
           }
@@ -1611,7 +1613,7 @@ async function handleGetAllBookings(args) {
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-        timeZone: 'America/Denver'
+        timeZone: timezone
       }),
       phone: booking.metadata?.phone || 'Not provided',
       reason: booking.metadata?.reason || 'Not specified',

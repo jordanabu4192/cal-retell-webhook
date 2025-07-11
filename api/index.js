@@ -140,11 +140,10 @@ module.exports = async (req, res) => {
   
 if (req.method === 'POST') {
   try {
-    console.log('=== WEBHOOK DEBUG ===');
-    console.log('Full request body:', JSON.stringify(req.body, null, 2));
-    console.log('Function name:', req.body.name);
-    console.log('Function args:', JSON.stringify(req.body.arguments, null, 2));
-    console.log('==================');
+    console.log('▶️ RECEIVED WEBHOOK:', JSON.stringify(req.body, null, 2));
+    const name = req.body.name;
+    const args = req.body.arguments || req.body.args;
+    console.log('▶️ PARSED INPUTS → name:', name, ', args:', JSON.stringify(args, null, 2));
     console.log('Call ID:', req.body.call_id);
 
 if (req.body.event) {

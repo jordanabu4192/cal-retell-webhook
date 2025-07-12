@@ -338,7 +338,7 @@ async function handleRescheduleBooking(args) {
   
   try {
     // Use chrono to parse the new time
-    const utcTime = parseToUTC(new_start_time);
+    const utcTime = parseToUTC(new_start_time, timezone);
     
     const response = await fetch(`https://api.cal.com/v2/bookings/${booking_uid}/reschedule`, {
       method: 'POST',

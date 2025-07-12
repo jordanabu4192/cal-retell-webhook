@@ -432,27 +432,22 @@ async function handleRescheduleBooking(args) {
   }
 }
 
-// Function 1: To find the booking
 async function handleFindBookingByDate(args) {
   const { email, appointment_date, appointment_time, timezone = args.business_timezone || "America/Denver" } = args;
 
-  console.log('Finding booking for:', email, appointment_date, appointment_time);
+  console.log('Finding booking for:', email, appointment_date, appointment_time, 'in timezone:', timezone);
 
   if (!email || !appointment_date || !appointment_time) {
     return { success: false, error: "Email, date, and time are required." };
   }
 
   try {
-    // This URL uses the correct 'status=upcoming' filter.
     const url = `https://api.cal.com/v2/bookings?email=${encodeURIComponent(email)}&status=upcoming`;
     console.log(`Fetching from Cal.com with URL: ${url}`);
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'cal-api-version': '2024-08-13',
-        'Authorization': `Bearer ${process.env.CAL_API_KEY}`
-      }
+      headers: { 'cal-api-version': '2024-08-13', 'Authorization': `Bearer ${process.env.CAL_API_KEY}` }
     });
 
     if (!response.ok) {
@@ -467,72 +462,46 @@ async function handleFindBookingByDate(args) {
     console.log(`Found ${upcomingBookings.length} upcoming bookings.`);
 
     if (upcomingBookings.length === 0) {
-      return {
-        success: false,
-        error: "No upcoming bookings found",
-        message: "I couldn't find any upcoming appointments for that email address."
-      };
+      return { success: false, error: "No upcoming bookings found", message: "I couldn't find any upcoming appointments for that email address." };
     }
 
-    // Now we find the best match from the correctly filtered list.
-    const matchedBooking = findBestMatch(upcomingBookings, appointment_date, appointment_time);
+    const matchedBooking = findBestMatch(upcomingBookings, appointment_date, appointment_time, timezone);
 
     if (matchedBooking) {
       const bookingDateTime = new Date(matchedBooking.start).toLocaleString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: 'America/Denver'
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', timeZone: timezone
       });
-      return {
-        success: true,
-        message: `Found your appointment for ${bookingDateTime}.`,
-        booking_uid: matchedBooking.uid
-      };
+      return { success: true, message: `Found your appointment for ${bookingDateTime}.`, booking_uid: matchedBooking.uid };
     } else {
-       return {
-        success: false,
-        error: "No matching appointment found for that specific date and time.",
-        message: `I see you have an upcoming appointment, but not for the date and time you mentioned. Please check and try again.`
-      };
+       return { success: false, error: "No matching appointment found for that specific date and time.", message: `I see you have an upcoming appointment, but not for the date and time you mentioned. Please check and try again.` };
     }
   } catch (error) {
     console.error('Find booking error:', error);
-    return {
-      success: false,
-      error: error.message,
-      message: "I'm having trouble with the booking system right now. Please try again in a moment."
-    };
+    return { success: false, error: error.message, message: "I'm having trouble with the booking system right now." };
   }
 }
 
-// Function 2: To match the booking
-function findBestMatch(bookings, dateStr, timeStr) {
-  console.log('Searching for appointment on', dateStr, 'at', timeStr);
+function findBestMatch(bookings, dateStr, timeStr, timezone = 'America/Denver') {
+  console.log('Searching for appointment on', dateStr, 'at', timeStr, 'in timezone:', timezone);
 
-  // A simple function to get just the date part (YYYY-MM-DD) in a specific timezone
-  function getLocalDate(date, timeZone) {
-    return new Date(date).toLocaleDateString('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  function getLocalDate(date, tz) {
+    return new Date(date).toLocaleDateString('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
   }
 
   try {
-    // We only need to parse the user's input string once.
-    const searchDate = chrono.parseDate(`${dateStr} ${timeStr}`);
+    const searchDate = chrono.parseDate(`${dateStr} ${timeStr}`, { timezone: timezone });
     if (!searchDate) {
       console.error("Chrono could not parse the user's date/time input.");
       return null;
     }
-    const targetLocalDate = getLocalDate(searchDate, 'America/Denver');
+    const targetLocalDate = getLocalDate(searchDate, timezone);
     console.log(`Targeting local date (YYYY-MM-DD): ${targetLocalDate}`);
 
     for (const booking of bookings) {
-      const bookingLocalDate = getLocalDate(booking.start, 'America/Denver');
+      const bookingLocalDate = getLocalDate(booking.start, timezone);
       console.log(`Comparing with Booking UID ${booking.uid} on local date: ${bookingLocalDate}`);
 
-      // If the dates match, we have found the correct appointment.
       if (bookingLocalDate === targetLocalDate) {
         console.log(`✅ Found matching booking: ${booking.uid}`);
         return booking;
@@ -551,26 +520,14 @@ function findBestMatch(bookings, dateStr, timeStr) {
 async function handleCheckAvailability(args, callId = 'unknown') {
   const { date, start_time, end_time, timezone = args.business_timezone || "America/Denver" } = args;
   
-  console.log('[check_availability] Called with:', {
-    args: args,
-    callId: callId,
-    date: args.date,
-    timezone: timezone  // Add this to see which timezone is being used
-  });
+  console.log('[check_availability] Called with:', { args, callId, timezone });
 
   try {
-    // Parse the date with chrono
-    const dateObj = chrono.parseDate(date, new Date(), { timezone });
+    // This is the critical fix: Do not provide new Date() as a reference.
+    const dateObj = chrono.parseDate(date, { timezone: timezone });
     
     if (!dateObj) {
-      return {
-        available: false,
-        availability_details: {
-          available: false,
-          message: "I couldn't understand that date. Please try something like 'July 8th' or 'tomorrow'."
-        },
-        date_checked: date
-      };
+        return { available: false, availability_details: { available: false, message: "I couldn't understand that date. Please try something like 'July 8th' or 'tomorrow'." }, date_checked: date };
     }
     
     // Check if it's a business day first
@@ -783,170 +740,38 @@ function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {
 
 async function handleBookAppointment(args, callId = 'unknown') {
   const { name, email, phone, appointment_date, appointment_time, reason, notes, start, timezone = args.business_timezone || "America/Denver" } = args;
-  
+
   console.log('[book_appointment] Called with:', {
     args: args,
     callId: callId,
-    appointment_date: args.appointment_date,
-    appointment_time: args.appointment_time,
-    name: name,
-    email: email,
-    timezone: timezone  // Added to see which timezone is being used
+    timezone: timezone
   });
-  console.log('[book_appointment] Call ID:', callId);
-  console.log('[book_appointment] Active sessions:', Array.from(activeSessions.keys()));
 
   // Validate required fields
   if (!name || !email || (!start && (!appointment_date || !appointment_time))) {
     return {
       success: false,
-      error: "I need the patient's name, email, and either an ISO start time or both appointment date and time."
+      error: "I need the patient's name, email, and either a specific start time or both an appointment date and time."
     };
   }
 
-  let appointmentDateTime;
-  let finalAppointmentDate = appointment_date;
-  
   try {
-   // Check if we have session data for this call
-  const session = activeSessions.get(callId);
-  console.log('[book_appointment] Session data:', session);
-  
-  if (session && session.parsedDate) {
-    // Parse the incoming appointment date to compare with stored session
-    const incomingDateStr = `${appointment_date} ${appointment_time}`;
-    const incomingParsed = chrono.parseDate(incomingDateStr, new Date(), { timeZone: timezone });
-    const incomingDateNormalized = incomingParsed.toISOString().split('T')[0]; // YYYY-MM-DD
-    
-    console.log('[book_appointment] Date comparison:', {
-      sessionParsedDate: session.parsedDate,
-      incomingDateNormalized: incomingDateNormalized,
-      originalSessionDate: session.originalCheckedDate || session.checkedDate,
-      incomingOriginal: appointment_date
-    });
-    
-    // Compare normalized dates
-    if (incomingDateNormalized === session.parsedDate) {
-      console.log('[book_appointment] ✅ Dates match after normalization!');
-      // Use the original session date to maintain consistency
-      finalAppointmentDate = session.originalCheckedDate || session.checkedDate;
-    } else {
-      console.log('[book_appointment] ⚠️ Date mismatch after normalization');
-      console.log(`[book_appointment] Expected: ${session.parsedDate}, Got: ${incomingDateNormalized}`);
-      // Still proceed with the date the agent provided
-    }
-  } else {
-    console.log('[book_appointment] No session found for callId:', callId);
-    
-    // ===== FALLBACK FOR AMBIGUOUS DATES =====
-    const lowerDate = appointment_date.toLowerCase().trim();
-    
-    // Handle day names without session data
-    if (['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].includes(lowerDate)) {
-      const dayMap = {
-        'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
-        'thursday': 4, 'friday': 5, 'saturday': 6
-      };
-      
-      const today = new Date();
-      const targetDay = dayMap[lowerDate];
-      const currentDay = today.getDay();
-      
-      // Calculate days until target (if today is target, get next week's)
-      let daysUntilTarget = (targetDay - currentDay + 7) % 7;
-      if (daysUntilTarget === 0) {
-        daysUntilTarget = 7; // If it's the same day, assume next week
-      }
-      
-      const targetDate = new Date(today);
-      targetDate.setDate(today.getDate() + daysUntilTarget);
-      
-      // Format it the same way check_availability would
-      finalAppointmentDate = targetDate.toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      });
-      
-      console.log(`[book_appointment] Fallback: Interpreted "${appointment_date}" as: ${finalAppointmentDate}`);
-    }
-    
-    // Handle "tomorrow"
-    else if (lowerDate === 'tomorrow') {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      
-      finalAppointmentDate = tomorrow.toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      });
-      
-      console.log(`[book_appointment] Fallback: Interpreted "tomorrow" as: ${finalAppointmentDate}`);
-    }
-    
-    // Handle "today"
-    else if (lowerDate === 'today') {
-      const today = new Date();
-      
-      finalAppointmentDate = today.toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      });
-      
-      console.log(`[book_appointment] Fallback: Interpreted "today" as: ${finalAppointmentDate}`);
-    }
-    
-    // Handle "next [day]" format
-    else if (lowerDate.startsWith('next ')) {
-      const dayName = lowerDate.replace('next ', '');
-      const dayMap = {
-        'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
-        'thursday': 4, 'friday': 5, 'saturday': 6
-      };
-      
-      if (dayMap.hasOwnProperty(dayName)) {
-        const today = new Date();
-        const targetDay = dayMap[dayName];
-        const currentDay = today.getDay();
-        
-        // Always get the next occurrence (minimum 7 days away)
-        let daysUntilTarget = (targetDay - currentDay + 7) % 7;
-        if (daysUntilTarget === 0) {
-          daysUntilTarget = 7;
-        }
-        daysUntilTarget += 7; // Add a week for "next"
-        
-        const targetDate = new Date(today);
-        targetDate.setDate(today.getDate() + daysUntilTarget);
-        
-        finalAppointmentDate = targetDate.toLocaleDateString('en-US', {
-          month: 'long',
-          day: 'numeric',
-          year: 'numeric'
-        });
-        
-        console.log(`[book_appointment] Fallback: Interpreted "${appointment_date}" as: ${finalAppointmentDate}`);
-      }
-    }
-  }
+    let appointmentDateTime;
 
-    // ===== CRITICAL: PARSE THE DATE AND TIME =====
+    // This simplified block correctly handles time by relying on your robust parseToUTC function.
+    // The complex and buggy fallback logic has been removed.
     if (start) {
-      // Direct ISO datetime provided
       appointmentDateTime = start;
-      console.log('[book_appointment] Using ISO start:', appointmentDateTime);
+      console.log('[book_appointment] Using provided ISO start time:', appointmentDateTime);
     } else {
-      // Combine date and time strings and let chrono parse it
-      const combinedDateTime = `${finalAppointmentDate} ${appointment_time}`;
+      const combinedDateTime = `${appointment_date} ${appointment_time}`;
       appointmentDateTime = parseToUTC(combinedDateTime, timezone);
-      console.log('[book_appointment] Parsed with chrono:', combinedDateTime, '→', appointmentDateTime);
+      console.log('[book_appointment] Parsed date and time to UTC:', appointmentDateTime);
     }
 
     const bookingData = {
       start: appointmentDateTime,
-      eventTypeId: 2694982,
+      eventTypeId: 2694982, // Make sure this is your correct Event Type ID from Cal.com
       attendee: {
         name: name,
         email: email,
@@ -968,29 +793,19 @@ async function handleBookAppointment(args, callId = 'unknown') {
       },
       body: JSON.stringify(bookingData)
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error('Cal.com booking error:', response.status, errorData);
       
-      if (response.status === 400) {
-        return {
-          success: false,
-          error: "That time slot is not available. Please choose a different time during our business hours."
-        };
+      if (response.status === 400 || response.status === 409) {
+        return { success: false, error: "That time slot is not available or is already booked. Please try checking for availability first." };
       }
-      if (response.status === 409) {
-        return {
-          success: false,
-          error: "That time slot is already booked. Please choose another time."
-        };
-      }
-      
       throw new Error(`Cal.com API error: ${response.status}`);
     }
-    
+
     const result = await response.json();
-    
+
     if (result.status === 'success') {
       const booking = result.data;
       const confirmationTime = new Date(booking.start).toLocaleString('en-US', {
@@ -1003,15 +818,8 @@ async function handleBookAppointment(args, callId = 'unknown') {
         timeZone: timezone
       });
 
-console.log('[HubSpot] Creating contact for:', email);
-
-      await createOrUpdateContact({
-  name,
-  email,
-  phone,
-  source: "AI Appointment Bot",
-  notes: reason || ''
-});
+      console.log('[HubSpot] Creating contact for:', email);
+      await createOrUpdateContact({ name, email, phone, source: "AI Appointment Bot", notes: reason || '' });
 
       return {
         success: true,
@@ -1025,27 +833,15 @@ console.log('[HubSpot] Creating contact for:', email);
         }
       };
     } else {
-      return {
-        success: false,
-        error: "There was an issue booking your appointment. Please try again or call our office directly."
-      };
+      return { success: false, error: "There was an issue booking your appointment. Please try again." };
     }
-    
+
   } catch (error) {
     console.error('Book appointment error:', error);
-    
-    // More specific error messages based on the error type
     if (error.message && error.message.includes('Could not parse date/time')) {
-      return {
-        success: false,
-        error: `I couldn't understand the date "${finalAppointmentDate}" with time "${appointment_time}". Please try a format like "July 8th at 3 PM" or let me check availability first.`
-      };
+      return { success: false, error: `I couldn't understand the date "${appointment_date}" with time "${appointment_time}". Please try a format like "July 8th at 3 PM".` };
     }
-    
-    return {
-      success: false,
-      error: "I'm having trouble booking that appointment. Please try again or call our office directly."
-    };
+    return { success: false, error: "I'm having trouble booking that appointment. Please try again or call our office directly." };
   }
 }
 

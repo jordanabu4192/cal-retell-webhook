@@ -607,15 +607,14 @@ if (availableSlots.length > 0) {
   });
   
   // Parse the date string to get a consistent date
-  const parsedDateObj = chrono.parseDate(date, new Date(), { timeZone: timezone });
-  const normalizedDateString = parsedDateObj.toISOString().split('T')[0]; // YYYY-MM-DD format
+  const normalizedDateString = dateObj.toISOString().split('T')[0];
   
   // Store session data for this call
   activeSessions.set(callId, {
     checkedDate: date, // Keep original for backward compatibility
     originalCheckedDate: date, // Store original for logging
     parsedDate: normalizedDateString, // Store normalized date for comparison
-    parsedDateObj: parsedDateObj, // Store full date object if needed
+    parsedDateObj: dateObj,
     availableTimes: availableTimes,
     availableSlots: availableSlots,
     timestamp: Date.now()

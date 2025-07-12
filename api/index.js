@@ -1,3 +1,4 @@
+const { zonedTimeToUtc } = require('date-fns-tz');
 const chrono = require('chrono-node');
 const { google } = require('googleapis');
 const sgMail = require('@sendgrid/mail');
@@ -303,29 +304,18 @@ if (name === 'send_confirmation_email') {
   return res.status(405).json({ error: "Method not allowed" });
 };
 
-function parseToMountainTime(dateTimeString, timezone = 'America/Denver') {
-  const parsed = chrono.parseDate(dateTimeString, new Date(), { timezone: timezone });
-  
-  if (!parsed) {
-    throw new Error(`Could not parse date/time: ${dateTimeString}`);
-  }
-  
-  return parsed;
-}
-
 async function handleRescheduleBooking(args) {
-  const { booking_uid, new_start_time, rescheduled_by, reason, timezone = args.business_timezone || "America/Denver" } = args;
+  const { booking_uid, appointment_date, appointment_time, reason, rescheduled_by, timezone = args.business_timezone || "America/Denver" } = args;
   
-  // The LLM now sends a perfect ISO 8601 UTC string, so no parsing is needed.
-  const utcTime = new_start_time;
+  console.log('Rescheduling booking:', booking_uid, 'to:', appointment_date, appointment_time, 'in timezone:', timezone);
   
-  console.log('Rescheduling booking:', booking_uid, 'to UTC time:', utcTime);
-  
-  if (!booking_uid || !utcTime) {
-    return { success: false, error: "Booking ID and a valid start time are required." };
+  if (!booking_uid || !appointment_date || !appointment_time) {
+    return { success: false, error: "Booking ID and a new date and time are required." };
   }
   
   try {
+    const utcTime = convertToUTC(appointment_date, appointment_time, timezone);
+    
     const response = await fetch(`https://api.cal.com/v2/bookings/${booking_uid}/reschedule`, {
       method: 'POST',
       headers: {
@@ -334,7 +324,7 @@ async function handleRescheduleBooking(args) {
         'Authorization': `Bearer ${process.env.CAL_API_KEY}`
       },
       body: JSON.stringify({
-        start: utcTime, // Pass the ISO string directly
+        start: utcTime,
         rescheduledBy: rescheduled_by || "user",
         reschedulingReason: reason || "Rescheduled by request"
       })
@@ -450,55 +440,59 @@ function findBestMatch(bookings, dateStr, timeStr, timezone = 'America/Denver') 
 }
 
 async function handleCheckAvailability(args, callId = 'unknown') {
-  const { date, start_time, end_time, timezone = args.business_timezone || "America/Denver" } = args;
+  const { appointment_date, appointment_time, timezone = args.business_timezone || "America/Denver" } = args;
+  
+  console.log('[check_availability] Called with:', { appointment_date, appointment_time, timezone });
 
-  console.log('[check_availability] Called with:', { date, timezone });
+  if (!appointment_date || !appointment_time) {
+      return { available: false, availability_details: { available: false, message: "A full date and time are required to check availability." }};
+  }
 
   try {
-    // The LLM now sends an absolute date, so parsing is simple and reliable.
-    const dateObj = chrono.parseDate(date, undefined, { timezone: timezone });
+    // Use our reliable helper to get the correct UTC time, then create a Date object from it.
+    const utcTimeString = convertToUTC(appointment_date, appointment_time, timezone);
+    const dateObj = new Date(utcTimeString);
 
-    if (!dateObj) {
-      return { available: false, availability_details: { available: false, message: "I couldn't understand that date." }};
-    }
-
-    const businessHours = getBusinessHoursAvailability(dateObj, start_time, end_time);
+    // Call the timezone-aware helper function
+    const businessHours = getBusinessHoursAvailability(dateObj, timezone);
     if (!businessHours.available) {
       return { available: false, availability_details: businessHours };
     }
 
     const startOfDay = new Date(dateObj);
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
     const endOfDay = new Date(dateObj);
-    endOfDay.setHours(23, 59, 59, 999);
-
+    endOfDay.setUTCHours(23, 59, 59, 999);
+    
     const slotsUrl = new URL('https://api.cal.com/v1/slots');
     slotsUrl.searchParams.append('apiKey', process.env.CAL_API_KEY);
     slotsUrl.searchParams.append('eventTypeId', '2694982');
     slotsUrl.searchParams.append('startTime', startOfDay.toISOString());
     slotsUrl.searchParams.append('endTime', endOfDay.toISOString());
     slotsUrl.searchParams.append('timeZone', timezone);
-
+      
     const response = await fetch(slotsUrl.toString());
-
+    
     if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Cal.com slots API error: ${response.status}`, errorText);
         throw new Error(`Cal.com slots API error: ${response.status}`);
     }
-
+      
     const slotsData = await response.json();
     const dateString = dateObj.toISOString().split('T')[0];
     const availableSlots = slotsData.slots?.[dateString] || [];
-
+    
     console.log(`Found ${availableSlots.length} available slots for ${dateString}`);
-
+      
     if (availableSlots.length > 0) {
         const availableTimes = availableSlots.map(slot => new Date(slot.time).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: timezone }));
-        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: timezone });
+        const dayName = new Date(dateObj).toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: timezone });
         let message = `Great! We have ${availableSlots.length} available time slots on ${dayName}. Some options include: ${availableTimes.slice(0,3).join(', ')}.`;
-
+        
         return { available: true, availability_details: { available: true, message: message }};
     } else {
-        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: timezone });
+        const dayName = new Date(dateObj).toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: timezone });
         return { available: false, availability_details: { available: false, message: `We don't have any available appointments on ${dayName}.` }};
     }
   } catch (error) {
@@ -508,17 +502,17 @@ async function handleCheckAvailability(args, callId = 'unknown') {
 }
 
 // ---- UPDATED: Business Hours with Date Object ----
-function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {
-  const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday
-  
-  console.log('Date:', dateObj.toDateString(), 'Day of week:', dayOfWeek);
+function getBusinessHoursAvailability(dateObj, timezone) {
+  // Get the day of the week (0=Sun, 6=Sat) IN THE SPECIFIED TIMEZONE.
+  const dayOfWeek = parseInt(new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'numeric'
+  }).format(dateObj)) % 7;
+
+  console.log('Date:', dateObj.toLocaleString('en-US', { timeZone: timezone }), 'Day of week:', dayOfWeek);
   
   if (dayOfWeek === 0) { // Sunday
-    return {
-      available: false,
-      message: "We're closed on Sundays",
-      business_hours: "Closed"
-    };
+    return { available: false, message: "We're closed on Sundays.", business_hours: "Closed" };
   }
   
   let hours = '';
@@ -528,27 +522,23 @@ function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {
     hours = "9:00 AM to 4:00 PM";
   }
   
-  return {
-    available: true,
-    message: `Available during business hours: ${hours}`,
-    business_hours: hours,
-    date: dateObj.toDateString()
-  };
+  return { available: true, message: `Available during business hours: ${hours}`, business_hours: hours };
 }
 
 async function handleBookAppointment(args, callId = 'unknown') {
-  const { name, email, phone, reason, notes, start, timezone = args.business_timezone || "America/Denver" } = args;
+  const { name, email, phone, appointment_date, appointment_time, reason, notes, timezone = args.business_timezone || "America/Denver" } = args;
 
   console.log('[book_appointment] Called with:', { args, callId, timezone });
 
-  // The 'start' time is now expected to be a full ISO 8601 UTC string from the LLM.
-  if (!name || !email || !start) {
-    return { success: false, error: "Name, email, and a valid start time are required." };
+  if (!name || !email || !appointment_date || !appointment_time) {
+    return { success: false, error: "Name, email, appointment date, and time are required." };
   }
 
   try {
+    const utcTime = convertToUTC(appointment_date, appointment_time, timezone);
+
     const bookingData = {
-      start: start, // Pass the ISO string directly
+      start: utcTime,
       eventTypeId: 2694982,
       attendee: { name, email, timeZone: timezone },
       metadata: { phone: phone || '', reason: reason || '', notes: notes || '' }
@@ -1195,4 +1185,17 @@ async function createOrUpdateContact({ name, email, phone, source = "Voice AI Ag
     console.error('[HubSpot] API call failed:', error);
     return { success: false, error: error.message };
   }
+}
+
+function convertToUTC(date, time, timezone) {
+  // date is expected in "YYYY-MM-DD" format, time is "HH:mm"
+  const localDateTimeString = `${date}T${time}:00`;
+  
+  // Use the new library to interpret the date as being in the specified
+  // timezone and convert it to the correct UTC equivalent.
+  const utcDate = zonedTimeToUtc(localDateTimeString, timezone);
+  
+  console.log(`[convertToUTC] Converted ${localDateTimeString} in ${timezone} to UTC: ${utcDate.toISOString()}`);
+  
+  return utcDate.toISOString();
 }

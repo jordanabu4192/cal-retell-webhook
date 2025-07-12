@@ -315,7 +315,7 @@ function parseToMountainTime(dateTimeString, timezone = 'America/Denver') {
 
 // ---- UPDATED: Reschedule with Chrono ----
 async function handleRescheduleBooking(args) {
-  const { booking_uid, new_start_time, rescheduled_by, reason } = args;
+  const { booking_uid, new_start_time, rescheduled_by, reason, timezone = args.business_timezone || "America/Denver" } = args;
   
   console.log('Rescheduling booking:', booking_uid, 'to:', new_start_time);
   

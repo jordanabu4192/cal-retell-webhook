@@ -1002,21 +1002,19 @@ async function handleTestCreateCall(args) {
 }
 
 function parseToUTC(dateTimeString, timezone = 'America/Denver') {
-  console.log(`[parseToUTC] Parsing absolute date: "${dateTimeString}" with timezone: ${timezone}`);
-  
-  // The LLM now sends an absolute date like "July 12 2025 9 AM",
-  // so Chrono can parse it reliably with the timezone hint.
-  const parsedDate = chrono.parseDate(dateTimeString, undefined, { timezone: timezone });
+  console.log(`[parseToUTC] Parsing: "${dateTimeString}" with timezone: ${timezone}`);
+
+  // 1. Create a reliable, timezone-aware reference date for "now".
+  const nowInLocalTimezoneStr = new Date().toLocaleString('en-US', { timeZone: timezone });
+  const refDate = new Date(nowInLocalTimezoneStr);
+
+  // 2. Pass this reliable reference date to Chrono.
+  const parsedDate = chrono.parseDate(dateTimeString, refDate, { timezone: timezone });
   
   if (!parsedDate) {
-    console.error(`[parseToUTC] Could not parse absolute date: ${dateTimeString}`);
+    console.error(`[parseToUTC] Could not parse: ${dateTimeString}`);
     throw new Error(`Could not parse date/time: ${dateTimeString}`);
   }
-
-  const utcString = parsedDate.toISOString();
-  console.log(`[parseToUTC] Converted to UTC: ${utcString}`);
-  return utcString;
-}
   
   // 3. Convert the correctly parsed date to a UTC ISO string.
   const utcString = parsedDate.toISOString();

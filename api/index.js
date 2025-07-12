@@ -520,190 +520,77 @@ function findBestMatch(bookings, dateStr, timeStr, timezone = 'America/Denver') 
 async function handleCheckAvailability(args, callId = 'unknown') {
   const { date, start_time, end_time, timezone = args.business_timezone || "America/Denver" } = args;
   
-  console.log('[check_availability] Called with:', { args, callId, timezone });
+  console.log('[check_availability] Called with:', { date, timezone });
 
   try {
-  const dateObj = chrono.parseDate(date, undefined, { timezone: timezone });
+    // --- START OF THE FIX ---
+    // 1. Get the current moment as a string in the business's local timezone.
+    const nowInLocalTimezoneStr = new Date().toLocaleString('en-US', { timeZone: timezone });
+    
+    // 2. Create a new Date object from that local time string. This is our reliable reference.
+    const refDate = new Date(nowInLocalTimezoneStr);
+    
+    // 3. Pass the reliable reference date to Chrono.
+    const dateObj = chrono.parseDate(date, refDate, { timezone: timezone });
+    // --- END OF THE FIX ---
     
     if (!dateObj) {
-        return { available: false, availability_details: { available: false, message: "I couldn't understand that date. Please try something like 'July 8th' or 'tomorrow'." }, date_checked: date };
+      return { available: false, availability_details: { available: false, message: "I couldn't understand that date. Please try something like 'tomorrow'." }};
     }
     
-    // Check if it's a business day first
     const businessHours = getBusinessHoursAvailability(dateObj, start_time, end_time);
-    
     if (!businessHours.available) {
-      return {
-        available: false,
-        availability_details: businessHours,
-        date_checked: date
-      };
+      return { available: false, availability_details: businessHours };
     }
     
-    // Get start and end of the requested day for Cal.com slots API
     const startOfDay = new Date(dateObj);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(dateObj);
     endOfDay.setHours(23, 59, 59, 999);
     
-    try {
-      // Use Cal.com's slots API to get actual available time slots
-      const slotsUrl = new URL('https://api.cal.com/v1/slots');
-      slotsUrl.searchParams.append('apiKey', process.env.CAL_API_KEY);
-      slotsUrl.searchParams.append('eventTypeId', '2694982'); // Your event type ID
-      slotsUrl.searchParams.append('startTime', startOfDay.toISOString());
-      slotsUrl.searchParams.append('endTime', endOfDay.toISOString());
-      slotsUrl.searchParams.append('timeZone', timezone);
+    const slotsUrl = new URL('https://api.cal.com/v1/slots');
+    slotsUrl.searchParams.append('apiKey', process.env.CAL_API_KEY);
+    slotsUrl.searchParams.append('eventTypeId', '2694982');
+    slotsUrl.searchParams.append('startTime', startOfDay.toISOString());
+    slotsUrl.searchParams.append('endTime', endOfDay.toISOString());
+    slotsUrl.searchParams.append('timeZone', timezone);
       
-      console.log('Fetching slots from Cal.com:', slotsUrl.toString());
+    const response = await fetch(slotsUrl.toString());
+    
+    if (!response.ok) {
+        throw new Error(`Cal.com slots API error: ${response.status}`);
+    }
       
-      const response = await fetch(slotsUrl.toString(), {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+    const slotsData = await response.json();
+    const dateString = dateObj.toISOString().split('T')[0];
+    const availableSlots = slotsData.slots?.[dateString] || [];
+    
+    console.log(`Found ${availableSlots.length} available slots for ${dateString}`);
       
-      if (!response.ok) {
-        console.error('Cal.com slots API error:', response.status);
-        const errorText = await response.text();
-        console.error('Error details:', errorText);
-        
-        // Fallback to basic business hours response
-        return {
-          available: true,
-          availability_details: {
-            available: true,
-            message: `${businessHours.message}. Please call to confirm specific time availability.`,
-            business_hours: businessHours.business_hours,
-            note: "Unable to check real-time availability"
-          },
-          date_checked: date
-        };
-      }
-      
-      const slotsData = await response.json();
-      console.log('Cal.com slots response:', JSON.stringify(slotsData, null, 2));
-      
-      // Extract slots for the requested date
-      const dateString = dateObj.toISOString().split('T')[0]; //YYYY-MM-DD format
-      const availableSlots = slotsData.slots?.[dateString] || [];
-      
-      console.log(`Found ${availableSlots.length} available slots for ${dateString}`);
-      
-      // Find this section in your handleCheckAvailability function and replace it:
+    if (availableSlots.length > 0) {
+        const availableTimes = availableSlots.map(slot => new Date(slot.time).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: timezone }));
+        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: timezone });
+        let message = `Great! We have ${availableSlots.length} available time slots on ${dayName}. Some options include: ${availableTimes.slice(0,3).join(', ')}.`;
 
-if (availableSlots.length > 0) {
-  // Format available times for display
-  const availableTimes = availableSlots.map(slot => {
-    const slotTime = new Date(slot.time);
-    return slotTime.toLocaleString('en-US', {
-      hour: 'numeric',
-      minute: slotTime.getMinutes() === 0 ? undefined : '2-digit',
-      hour12: true,
-      timeZone: timezone
-    });
-  });
-  
-  // Parse the date string to get a consistent date
-  const normalizedDateString = dateObj.toISOString().split('T')[0];
-  
-  // Store session data for this call
-  activeSessions.set(callId, {
-    checkedDate: date, // Keep original for backward compatibility
-    originalCheckedDate: date, // Store original for logging
-    parsedDate: normalizedDateString, // Store normalized date for comparison
-    parsedDateObj: dateObj,
-    availableTimes: availableTimes,
-    availableSlots: availableSlots,
-    timestamp: Date.now()
-  });
-  
-  console.log(`[session] Stored data for call ${callId}:`, {
-    originalCheckedDate: date,
-    parsedDate: normalizedDateString,
-    availableTimesCount: availableTimes.length
-  });
-  
-  // Create a helpful message with specific available times
-  const dayName = dateObj.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    month: 'long', 
-    day: 'numeric',
-    timeZone: timezone
-  });
-  
-  let message;
-  if (availableSlots.length === 1) {
-    message = `Great! We have 1 available time slot on ${dayName}: ${availableTimes[0]}.`;
-  } else if (availableSlots.length <= 3) {
-    message = `Great! We have ${availableSlots.length} available time slots on ${dayName}: ${availableTimes.join(', ')}.`;
-  } else {
-    // Show first few options
-    const firstThree = availableTimes.slice(0, 3).join(', ');
-    message = `Great! We have ${availableSlots.length} available time slots on ${dayName}. Some options include: ${firstThree} and ${availableSlots.length - 3} more.`;
-  }
-  
-return {
-  available: true,
-  availability_details: {
-    available: true,
-    message: message,
-    available_slots: availableSlots.length,
-    available_times: availableTimes,
-    business_hours: businessHours.business_hours
-  },
-  date_checked: date,
-  exact_booking_date: date  // ADD THIS LINE - the agent MUST use this value
-};
-
-      } else {
-        const dayName = dateObj.toLocaleDateString('en-US', { 
-          weekday: 'long', 
-          month: 'long', 
-          day: 'numeric',
-          timeZone: timezone
+        const normalizedDateString = dateObj.toISOString().split('T')[0];
+        activeSessions.set(callId, {
+            checkedDate: date,
+            originalCheckedDate: date,
+            parsedDate: normalizedDateString,
+            parsedDateObj: dateObj, 
+            availableTimes: availableTimes,
+            availableSlots: availableSlots,
+            timestamp: Date.now()
         });
         
-        return {
-          available: false,
-          availability_details: {
-            available: false,
-            message: `We don't have any available appointments on ${dayName}. Would you like to try a different day?`,
-            available_slots: 0,
-            business_hours: businessHours.business_hours
-          },
-          date_checked: date
-        };
-      }
-      
-    } catch (apiError) {
-      console.error('Cal.com slots API error:', apiError);
-      
-      // Fallback to basic business hours response
-      return {
-        available: true,
-        availability_details: {
-          available: true,
-          message: `${businessHours.message}. I'm having trouble checking our booking system, so please call to confirm specific time availability.`,
-          business_hours: businessHours.business_hours,
-          note: "Real-time availability check failed"
-        },
-        date_checked: date
-      };
+        return { available: true, availability_details: { available: true, message: message }, date_checked: date, exact_booking_date: date };
+    } else {
+        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: timezone });
+        return { available: false, availability_details: { available: false, message: `We don't have any available appointments on ${dayName}.` }};
     }
-    
   } catch (error) {
     console.error('Check availability error:', error);
-    
-    return {
-      available: false,
-      availability_details: {
-        available: false,
-        message: "I'm having trouble checking that date. Please try again or call our office."
-      },
-      date_checked: date
-    };
+    return { available: false, availability_details: { available: false, message: "I'm having trouble checking that date." } };
   }
 }
 

@@ -985,34 +985,18 @@ async function handleTestCreateCall(args) {
 function parseToUTC(dateTimeString, timezone = 'America/Denver') {
   console.log(`[parseToUTC] Parsing absolute date: "${dateTimeString}" for timezone: ${timezone}`);
 
-  // First, parse the date string. Chrono is still good for understanding the string itself.
-  const parsedDate = chrono.parseDate(dateTimeString);
+  // The LLM now sends an absolute date string like "July 12th at 9 AM".
+  // Chrono can reliably parse this string when given the correct timezone hint.
+  // We pass 'undefined' for the reference date because it's no longer needed.
+  const parsedDate = chrono.parseDate(dateTimeString, undefined, { timezone: timezone });
+  
   if (!parsedDate) {
     console.error(`[parseToUTC] Could not parse the date string: ${dateTimeString}`);
     throw new Error(`Could not parse date/time: ${dateTimeString}`);
   }
 
-  // Next, get the individual components of the parsed date.
-  const year = parsedDate.getFullYear();
-  const month = parsedDate.getMonth();
-  const day = parsedDate.getDate();
-  const hour = parsedDate.getHours();
-  const minute = parsedDate.getMinutes();
-
-  // Now, create a new date string in a format that explicitly includes the timezone,
-  // which JavaScript's Date constructor can parse reliably.
-  // We format it to look like "2025-07-12T09:00:00".
-  const isoDateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  const isoTimeString = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
-  const fullIsoString = `${isoDateString}T${isoTimeString}`;
-
-  // Create a date object by telling the constructor that the string IS in the target timezone.
-  // The 'Z' is not added, so it's interpreted as local to the specified timezone.
-  // This is a reliable way to create a timezone-aware date.
-  const dateInTimezone = new Date(fullIsoString + ' ' + timezone);
-
-  // Finally, convert this correct, timezone-aware date to a universal UTC ISO string.
-  const utcString = dateInTimezone.toISOString();
+  // Directly convert the valid Date object returned by Chrono to the UTC ISO string.
+  const utcString = parsedDate.toISOString();
   console.log(`[parseToUTC] Final Converted UTC String: ${utcString}`);
   
   return utcString;

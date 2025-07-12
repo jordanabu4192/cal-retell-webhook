@@ -519,71 +519,52 @@ function findBestMatch(bookings, dateStr, timeStr, timezone = 'America/Denver') 
 
 async function handleCheckAvailability(args, callId = 'unknown') {
   const { date, start_time, end_time, timezone = args.business_timezone || "America/Denver" } = args;
-  
+
   console.log('[check_availability] Called with:', { date, timezone });
 
   try {
-    // --- START OF THE FIX ---
-    // 1. Get the current moment as a string in the business's local timezone.
-    const nowInLocalTimezoneStr = new Date().toLocaleString('en-US', { timeZone: timezone });
-    
-    // 2. Create a new Date object from that local time string. This is our reliable reference.
-    const refDate = new Date(nowInLocalTimezoneStr);
-    
-    // 3. Pass the reliable reference date to Chrono.
-    const dateObj = chrono.parseDate(date, refDate, { timezone: timezone });
-    // --- END OF THE FIX ---
-    
+    // The LLM now sends an absolute date, so parsing is simple and reliable.
+    const dateObj = chrono.parseDate(date, undefined, { timezone: timezone });
+
     if (!dateObj) {
-      return { available: false, availability_details: { available: false, message: "I couldn't understand that date. Please try something like 'tomorrow'." }};
+      return { available: false, availability_details: { available: false, message: "I couldn't understand that date." }};
     }
-    
+
     const businessHours = getBusinessHoursAvailability(dateObj, start_time, end_time);
     if (!businessHours.available) {
       return { available: false, availability_details: businessHours };
     }
-    
+
     const startOfDay = new Date(dateObj);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(dateObj);
     endOfDay.setHours(23, 59, 59, 999);
-    
+
     const slotsUrl = new URL('https://api.cal.com/v1/slots');
     slotsUrl.searchParams.append('apiKey', process.env.CAL_API_KEY);
     slotsUrl.searchParams.append('eventTypeId', '2694982');
     slotsUrl.searchParams.append('startTime', startOfDay.toISOString());
     slotsUrl.searchParams.append('endTime', endOfDay.toISOString());
     slotsUrl.searchParams.append('timeZone', timezone);
-      
+
     const response = await fetch(slotsUrl.toString());
-    
+
     if (!response.ok) {
         throw new Error(`Cal.com slots API error: ${response.status}`);
     }
-      
+
     const slotsData = await response.json();
     const dateString = dateObj.toISOString().split('T')[0];
     const availableSlots = slotsData.slots?.[dateString] || [];
-    
+
     console.log(`Found ${availableSlots.length} available slots for ${dateString}`);
-      
+
     if (availableSlots.length > 0) {
         const availableTimes = availableSlots.map(slot => new Date(slot.time).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: timezone }));
         const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: timezone });
         let message = `Great! We have ${availableSlots.length} available time slots on ${dayName}. Some options include: ${availableTimes.slice(0,3).join(', ')}.`;
 
-        const normalizedDateString = dateObj.toISOString().split('T')[0];
-        activeSessions.set(callId, {
-            checkedDate: date,
-            originalCheckedDate: date,
-            parsedDate: normalizedDateString,
-            parsedDateObj: dateObj, 
-            availableTimes: availableTimes,
-            availableSlots: availableSlots,
-            timestamp: Date.now()
-        });
-        
-        return { available: true, availability_details: { available: true, message: message }, date_checked: date, exact_booking_date: date };
+        return { available: true, availability_details: { available: true, message: message }};
     } else {
         const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: timezone });
         return { available: false, availability_details: { available: false, message: `We don't have any available appointments on ${dayName}.` }};
@@ -1002,23 +983,18 @@ async function handleTestCreateCall(args) {
 }
 
 function parseToUTC(dateTimeString, timezone = 'America/Denver') {
-  console.log(`[parseToUTC] Parsing: "${dateTimeString}" with timezone: ${timezone}`);
+  console.log(`[parseToUTC] Parsing absolute date: "${dateTimeString}" with timezone: ${timezone}`);
 
-  // 1. Create a reliable, timezone-aware reference date for "now".
-  const nowInLocalTimezoneStr = new Date().toLocaleString('en-US', { timeZone: timezone });
-  const refDate = new Date(nowInLocalTimezoneStr);
+  // The LLM now sends an absolute date, so parsing is simple and reliable.
+  const parsedDate = chrono.parseDate(dateTimeString, undefined, { timezone: timezone });
 
-  // 2. Pass this reliable reference date to Chrono.
-  const parsedDate = chrono.parseDate(dateTimeString, refDate, { timezone: timezone });
-  
   if (!parsedDate) {
-    console.error(`[parseToUTC] Could not parse: ${dateTimeString}`);
+    console.error(`[parseToUTC] Could not parse absolute date: ${dateTimeString}`);
     throw new Error(`Could not parse date/time: ${dateTimeString}`);
   }
-  
-  // 3. Convert the correctly parsed date to a UTC ISO string.
+
   const utcString = parsedDate.toISOString();
-  console.log(`[parseToUTC] Correctly converted "${dateTimeString}" to UTC: ${utcString}`);
+  console.log(`[parseToUTC] Converted to UTC: ${utcString}`);
   return utcString;
 }
 

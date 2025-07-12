@@ -434,7 +434,7 @@ async function handleRescheduleBooking(args) {
 
 // Function 1: To find the booking
 async function handleFindBookingByDate(args) {
-  const { email, appointment_date, appointment_time } = args;
+  const { email, appointment_date, appointment_time, timezone = args.business_timezone || "America/Denver" } = args;
 
   console.log('Finding booking for:', email, appointment_date, appointment_time);
 
@@ -597,7 +597,7 @@ async function handleCheckAvailability(args, callId = 'unknown') {
       slotsUrl.searchParams.append('eventTypeId', '2694982'); // Your event type ID
       slotsUrl.searchParams.append('startTime', startOfDay.toISOString());
       slotsUrl.searchParams.append('endTime', endOfDay.toISOString());
-      slotsUrl.searchParams.append('timeZone', 'America/Denver');
+      slotsUrl.searchParams.append('timeZone', timezone);
       
       console.log('Fetching slots from Cal.com:', slotsUrl.toString());
       
@@ -782,17 +782,7 @@ function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {
 }
 
 async function handleBookAppointment(args, callId = 'unknown') {
-  const { 
-    name, 
-    email, 
-    phone, 
-    appointment_date, 
-    appointment_time, 
-    reason,
-    notes,
-    start,
-    timezone = args.business_timezone || "America/Denver"
-  } = args;
+  const { name, email, phone, appointment_date, appointment_time, reason, notes, start, timezone = args.business_timezone || "America/Denver" } = args;
   
   console.log('[book_appointment] Called with:', {
     args: args,
@@ -960,7 +950,7 @@ async function handleBookAppointment(args, callId = 'unknown') {
       attendee: {
         name: name,
         email: email,
-        timeZone: "America/Denver"
+        timeZone: timezone
       },
       metadata: {
         phone: phone || '',
@@ -1060,7 +1050,7 @@ console.log('[HubSpot] Creating contact for:', email);
 }
 
 async function handleCancelBooking(args) {
-  const { booking_uid, cancellation_reason = "Cancelled by patient" } = args;
+  const { booking_uid, cancellation_reason = "Cancelled by patient", timezone = args.business_timezone || "America/Denver" } = args;
   
   console.log('Cancelling booking:', args);
   
@@ -1331,28 +1321,19 @@ async function handleTestCreateCall(args) {
 }
 
 function parseToUTC(dateTimeString, timezone = 'America/Denver') {
-  console.log(`[parseToUTC] Parsing: "${dateTimeString}" in timezone: ${timezone}`);
+  console.log(`[parseToUTC] Parsing: "${dateTimeString}" with assumed timezone: ${timezone}`);
   
-  // Parse the date/time string as if it's in Mountain Time
-  const parsed = chrono.parseDate(dateTimeString, new Date());
+  // Let chrono parse the date string, understanding it's in the specified timezone
+  const parsedDate = chrono.parseDate(dateTimeString, { timezone: timezone });
   
-  if (!parsed) {
+  if (!parsedDate) {
     console.error(`[parseToUTC] Could not parse: ${dateTimeString}`);
     throw new Error(`Could not parse date/time: ${dateTimeString}`);
   }
   
-  console.log(`[parseToUTC] Chrono parsed as local: ${parsed.toISOString()}`);
-  
-  // In July, Mountain Time is MDT (UTC-6)
-  // We need to add 6 hours to convert Mountain Time to UTC
-  const mountainOffsetHours = 6; // MDT is UTC-6
-  const mountainOffsetMs = mountainOffsetHours * 60 * 60 * 1000;
-  
-  // Add the offset to convert from Mountain Time to UTC
-  const utcTime = new Date(parsed.getTime() + mountainOffsetMs);
-  
-  const utcString = utcTime.toISOString();
-  console.log(`[parseToUTC] Final UTC result: ${utcString}`);
+  // Convert the parsed date to a UTC ISO string
+  const utcString = parsedDate.toISOString();
+  console.log(`[parseToUTC] Correctly converted to UTC: ${utcString}`);
   return utcString;
 }
 

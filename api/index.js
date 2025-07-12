@@ -523,8 +523,7 @@ async function handleCheckAvailability(args, callId = 'unknown') {
   console.log('[check_availability] Called with:', { args, callId, timezone });
 
   try {
-    // This is the critical fix: Do not provide new Date() as a reference.
-    const dateObj = chrono.parseDate(date, { timezone: timezone });
+  const dateObj = chrono.parseDate(date, undefined, { timezone: timezone });
     
     if (!dateObj) {
         return { available: false, availability_details: { available: false, message: "I couldn't understand that date. Please try something like 'July 8th' or 'tomorrow'." }, date_checked: date };

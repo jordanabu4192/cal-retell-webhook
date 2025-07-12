@@ -1,4 +1,4 @@
-const { zonedTimeToUtc } = require('date-fns-tz');
+const dateFnsTz = require('date-fns-tz');
 const chrono = require('chrono-node');
 const { google } = require('googleapis');
 const sgMail = require('@sendgrid/mail');
@@ -1188,12 +1188,8 @@ async function createOrUpdateContact({ name, email, phone, source = "Voice AI Ag
 }
 
 function convertToUTC(date, time, timezone) {
-  // date is expected in "YYYY-MM-DD" format, time is "HH:mm"
   const localDateTimeString = `${date}T${time}:00`;
-  
-  // Use the new library to interpret the date as being in the specified
-  // timezone and convert it to the correct UTC equivalent.
-  const utcDate = zonedTimeToUtc(localDateTimeString, timezone);
+  const utcDate = dateFnsTz.zonedTimeToUtc(localDateTimeString, timezone); 
   
   console.log(`[convertToUTC] Converted ${localDateTimeString} in ${timezone} to UTC: ${utcDate.toISOString()}`);
   

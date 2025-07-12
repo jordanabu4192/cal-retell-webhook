@@ -1571,7 +1571,7 @@ async function handleGetAllBookings(args) {
 }
 
 async function handleUpdateBookingMetadata(args) {
-  const { booking_uid, new_phone, new_reason, new_notes } = args;
+  const { booking_uid, new_phone, new_reason, new_notes, timezone = args.business_timezone || "America/Denver" } = args;
   
   try {
     // First, get the existing booking details

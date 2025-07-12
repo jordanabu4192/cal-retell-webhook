@@ -313,33 +313,19 @@ function parseToMountainTime(dateTimeString, timezone = 'America/Denver') {
   return parsed;
 }
 
-// ---- UPDATED: Reschedule with Chrono ----
 async function handleRescheduleBooking(args) {
   const { booking_uid, new_start_time, rescheduled_by, reason, timezone = args.business_timezone || "America/Denver" } = args;
   
-  console.log('Rescheduling booking:', booking_uid, 'to:', new_start_time);
+  // The LLM now sends a perfect ISO 8601 UTC string, so no parsing is needed.
+  const utcTime = new_start_time;
   
-  // Validate required fields
-  if (!booking_uid) {
-    return {
-      success: false,
-      error: "Booking ID is required",
-      message: "I need your booking ID to reschedule. Can you provide that?"
-    };
-  }
+  console.log('Rescheduling booking:', booking_uid, 'to UTC time:', utcTime);
   
-  if (!new_start_time) {
-    return {
-      success: false,
-      error: "New appointment time is required", 
-      message: "I need to know what time you'd like to reschedule to. When works better for you?"
-    };
+  if (!booking_uid || !utcTime) {
+    return { success: false, error: "Booking ID and a valid start time are required." };
   }
   
   try {
-    // Use chrono to parse the new time
-    const utcTime = parseToUTC(new_start_time, timezone);
-    
     const response = await fetch(`https://api.cal.com/v2/bookings/${booking_uid}/reschedule`, {
       method: 'POST',
       headers: {
@@ -348,7 +334,7 @@ async function handleRescheduleBooking(args) {
         'Authorization': `Bearer ${process.env.CAL_API_KEY}`
       },
       body: JSON.stringify({
-        start: utcTime,
+        start: utcTime, // Pass the ISO string directly
         rescheduledBy: rescheduled_by || "user",
         reschedulingReason: reason || "Rescheduled by request"
       })
@@ -356,29 +342,8 @@ async function handleRescheduleBooking(args) {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.error('Cal.com API error:', response.status);
-      console.error('Cal.com error details:', errorData);
-      
-      if (response.status === 404) {
-        return {
-          success: false,
-          error: "Booking not found",
-          message: "I couldn't find a booking with that ID. Can you double-check your booking number?"
-        };
-      }
-      if (response.status === 400) {
-        return {
-          success: false,
-          error: "Time slot unavailable",
-          message: "That time slot might not be available. Can you suggest another time?"
-        };
-      }
-      
-      return {
-        success: false,
-        error: `Cal.com API error: ${response.status}`,
-        message: "I'm having trouble with the booking system. Please try again in a moment."
-      };
+      console.error('Cal.com reschedule error:', response.status, errorData);
+      return { success: false, error: "Failed to reschedule.", message: "I couldn't reschedule that appointment. The time slot may be unavailable." };
     }
     
     const result = await response.json();
@@ -386,49 +351,16 @@ async function handleRescheduleBooking(args) {
     if (result.status === 'success') {
       const booking = result.data;
       const newDateTime = new Date(booking.start).toLocaleString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: timezone
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', timeZone: timezone
       });
-      
-      return {
-        success: true,
-        message: `Perfect! I've successfully rescheduled your booking to ${newDateTime}. Your booking ID is ${booking.uid}.`,
-        booking_details: {
-          booking_id: booking.uid,
-          new_datetime: newDateTime,
-          original_request: new_start_time
-        }
-      };
+      return { success: true, message: `Perfect! I've successfully rescheduled your booking to ${newDateTime}.` };
     } else {
-      return {
-        success: false,
-        error: "Rescheduling failed",
-        message: "I encountered an issue while rescheduling your booking. Please try again."
-      };
+      return { success: false, error: "Rescheduling failed.", message: "I encountered an issue while rescheduling." };
     }
-    
   } catch (error) {
     console.error('Reschedule error:', error);
-    
-    // Check if it's a chrono parsing error
-    if (error.message.includes('Could not parse date/time')) {
-      return {
-        success: false,
-        error: "Invalid date/time format",
-        message: "I'm sorry, I couldn't understand that date and time format. Could you try something like 'July 9th at 2 PM'?"
-      };
-    }
-    
-    return {
-      success: false,
-      error: error.message,
-      message: "I'm sorry, I'm having trouble connecting to the booking system right now. Please try again in a few minutes."
-    };
+    return { success: false, error: error.message, message: "I'm having trouble connecting to the booking system." };
   }
 }
 
@@ -605,49 +537,21 @@ function getBusinessHoursAvailability(dateObj, requestedStart, requestedEnd) {
 }
 
 async function handleBookAppointment(args, callId = 'unknown') {
-  const { name, email, phone, appointment_date, appointment_time, reason, notes, start, timezone = args.business_timezone || "America/Denver" } = args;
+  const { name, email, phone, reason, notes, start, timezone = args.business_timezone || "America/Denver" } = args;
 
-  console.log('[book_appointment] Called with:', {
-    args: args,
-    callId: callId,
-    timezone: timezone
-  });
+  console.log('[book_appointment] Called with:', { args, callId, timezone });
 
-  // Validate required fields
-  if (!name || !email || (!start && (!appointment_date || !appointment_time))) {
-    return {
-      success: false,
-      error: "I need the patient's name, email, and either a specific start time or both an appointment date and time."
-    };
+  // The 'start' time is now expected to be a full ISO 8601 UTC string from the LLM.
+  if (!name || !email || !start) {
+    return { success: false, error: "Name, email, and a valid start time are required." };
   }
 
   try {
-    let appointmentDateTime;
-
-    // This simplified block correctly handles time by relying on your robust parseToUTC function.
-    // The complex and buggy fallback logic has been removed.
-    if (start) {
-      appointmentDateTime = start;
-      console.log('[book_appointment] Using provided ISO start time:', appointmentDateTime);
-    } else {
-      const combinedDateTime = `${appointment_date} ${appointment_time}`;
-      appointmentDateTime = parseToUTC(combinedDateTime, timezone);
-      console.log('[book_appointment] Parsed date and time to UTC:', appointmentDateTime);
-    }
-
     const bookingData = {
-      start: appointmentDateTime,
-      eventTypeId: 2694982, // Make sure this is your correct Event Type ID from Cal.com
-      attendee: {
-        name: name,
-        email: email,
-        timeZone: timezone
-      },
-      metadata: {
-        phone: phone || '',
-        reason: reason || 'General appointment',
-        notes: notes || ''
-      }
+      start: start, // Pass the ISO string directly
+      eventTypeId: 2694982,
+      attendee: { name, email, timeZone: timezone },
+      metadata: { phone: phone || '', reason: reason || '', notes: notes || '' }
     };
 
     const response = await fetch('https://api.cal.com/v2/bookings', {
@@ -661,13 +565,9 @@ async function handleBookAppointment(args, callId = 'unknown') {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('Cal.com booking error:', response.status, errorData);
-      
-      if (response.status === 400 || response.status === 409) {
-        return { success: false, error: "That time slot is not available or is already booked. Please try checking for availability first." };
-      }
-      throw new Error(`Cal.com API error: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Cal.com booking error:', response.status, errorData);
+        throw new Error(`Cal.com booking error: ${response.status}`);
     }
 
     const result = await response.json();
@@ -675,39 +575,23 @@ async function handleBookAppointment(args, callId = 'unknown') {
     if (result.status === 'success') {
       const booking = result.data;
       const confirmationTime = new Date(booking.start).toLocaleString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: timezone
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', timeZone: timezone
       });
 
-      console.log('[HubSpot] Creating contact for:', email);
       await createOrUpdateContact({ name, email, phone, source: "AI Appointment Bot", notes: reason || '' });
 
       return {
         success: true,
         booking_id: booking.uid,
-        confirmation_message: `Perfect! I've successfully booked your appointment for ${confirmationTime}. Your confirmation number is ${booking.uid}. You'll receive an email confirmation shortly.`,
-        appointment_details: {
-          date_time: confirmationTime,
-          patient_name: name,
-          patient_email: email,
-          booking_id: booking.uid
-        }
+        confirmation_message: `Perfect! I've booked your appointment for ${confirmationTime}. Your confirmation number is ${booking.uid}.`
       };
     } else {
-      return { success: false, error: "There was an issue booking your appointment. Please try again." };
+      return { success: false, error: "Booking failed.", message: "I couldn't book the appointment. Please try again." };
     }
-
   } catch (error) {
     console.error('Book appointment error:', error);
-    if (error.message && error.message.includes('Could not parse date/time')) {
-      return { success: false, error: `I couldn't understand the date "${appointment_date}" with time "${appointment_time}". Please try a format like "July 8th at 3 PM".` };
-    }
-    return { success: false, error: "I'm having trouble booking that appointment. Please try again or call our office directly." };
+    return { success: false, error: error.message, message: "I'm having trouble booking that appointment right now." };
   }
 }
 
@@ -980,26 +864,6 @@ async function handleTestCreateCall(args) {
     console.error('Test call error:', error);
     return { success: false, error: error.message };
   }
-}
-
-function parseToUTC(dateTimeString, timezone = 'America/Denver') {
-  console.log(`[parseToUTC] Parsing absolute date: "${dateTimeString}" for timezone: ${timezone}`);
-
-  // The LLM now sends an absolute date string like "July 12th at 9 AM".
-  // Chrono can reliably parse this string when given the correct timezone hint.
-  // We pass 'undefined' for the reference date because it's no longer needed.
-  const parsedDate = chrono.parseDate(dateTimeString, undefined, { timezone: timezone });
-  
-  if (!parsedDate) {
-    console.error(`[parseToUTC] Could not parse the date string: ${dateTimeString}`);
-    throw new Error(`Could not parse date/time: ${dateTimeString}`);
-  }
-
-  // Directly convert the valid Date object returned by Chrono to the UTC ISO string.
-  const utcString = parsedDate.toISOString();
-  console.log(`[parseToUTC] Final Converted UTC String: ${utcString}`);
-  
-  return utcString;
 }
 
 async function authenticateGmail() {
